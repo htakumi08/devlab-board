@@ -24,6 +24,18 @@
 
 旧アプリ実装は一度削除し、ここから小さい単位で作り直す。
 
+## Docker Compose 起動後のアクセス先
+
+`.env.example` をもとに `.env` を用意し、`docker compose up` で起動した場合のローカル接続先は次のとおり。
+
+| Service | 接続先 | 用途 |
+| --- | --- | --- |
+| Frontend | <http://localhost:30101> | ブラウザで開く画面 |
+| Backend API | <http://localhost:30102> | Go HTTP API |
+| PostgreSQL | `localhost:30103` | ホスト側のDBクライアントから接続する場合 |
+
+通常、アプリを確認するときは <http://localhost:30101> をブラウザで開く。
+
 ## Codex workflow
 
 Codex で作業するときは、まず `AGENTS.md` と `codex-workflow/README.md` を確認する。

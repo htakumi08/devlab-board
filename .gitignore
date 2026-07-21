@@ -1,0 +1,50 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+yarn-error.log*
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/coverage/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Backend
+backend/bin/
+backend/coverage.out
+backend/tmp/
+
+# Terraform / infra
+infra/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/crash.log
+infra/**/.terraform.lock.hcl.tmp
+infra/**/override.tf
+infra/**/override.tf.json
+infra/**/*_override.tf
+infra/**/*_override.tf.json
+
+# Terraform local backend configuration
+infra/**/backend.hcl
+
+# Local documentation images
+docs/UI-images/
+
+# Local artifacts
+tmp/
+coverage/
+.yarn-integrity

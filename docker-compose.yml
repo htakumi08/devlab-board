@@ -1,0 +1,70 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: devlab-board-frontend
+    working_dir: /app
+    command: sh -c "yarn install --frozen-lockfile && yarn dev --host 0.0.0.0 --port ${FRONTEND_DEV_PORT}"
+    ports:
+      - "${FRONTEND_PORT}:${FRONTEND_DEV_PORT}"
+    environment:
+      VITE_API_BASE_URL: http://localhost:${BACKEND_PORT}
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: devlab-board-backend
+    working_dir: /app
+    command: sh -c "go run ./cmd/api"
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_APP_PORT}"
+    environment:
+      APP_ENV: ${APP_ENV}
+      PORT: ${BACKEND_APP_PORT}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:30101}
+      SESSION_STORE: ${SESSION_STORE:-postgres}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      REDIS_ADDR: ${REDIS_ADDR:-localhost:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+    volumes:
+      - ./backend:/app
+      - go-pkg-mod:/go/pkg/mod
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-alpine
+    container_name: devlab-board-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres18-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  frontend-node-modules:
+  go-pkg-mod:
+  postgres18-data:

@@ -1,0 +1,67 @@
+Project devlab_board {
+  database_type: "PostgreSQL"
+  Note: '''
+    devlab-board の DB 設計メモ。
+    現時点では旧アプリのスキーマを引き継がず、
+    実験機能ごとに小さく追加していく。
+  '''
+}
+
+Table users {
+  id bigint [pk, increment, note: 'ユーザID']
+  public_id uuid [not null, unique, note: '外部公開ID']
+  email text [not null, unique, note: 'emailアドレス']
+  password_hash text [not null, note: 'ログインパスワードのハッシュ値']
+  name text [not null, note: 'ユーザーネーム']
+  role text [not null, default: 'user', note: 'ユーザーロール: ログイン後に使える機能を判別']
+  created_at timestamptz [not null, note: '作成日時']
+  updated_at timestamptz [not null, note: '更新日時']
+
+  Note: '''
+    【ユーザ】テーブル
+    ログインユーザを管理する
+  '''
+}
+
+Table sessions {
+  token text [pk, note: 'セッションライブラリが発行するセッショントークン']
+  data bytea [not null, note: 'セッションデータ。ログイン中ユーザIDなどをライブラリがエンコードして保存する']
+  expiry timestamptz [not null, note: 'セッション期限']
+
+  indexes {
+    expiry
+  }
+
+  Note: '''
+    【セッションストア】テーブル
+    net/http + セッションライブラリの server-side session store として使う。
+    SCS PostgreSQL store の標準形に合わせ、ログイン中ユーザIDは data に保存する。
+    期限切れ削除やログアウト時の破棄はセッションライブラリに委ねる。
+  '''
+}
+
+Table experiments {
+  id bigint [pk, increment]
+  title text [not null]
+  slug text [not null, unique]
+  description text
+  status text [not null, default: 'draft']
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: '''
+    ダッシュボードに追加する実験機能の単位。
+  '''
+}
+
+Table experiment_notes {
+  id bigint [pk, increment]
+  experiment_id bigint [not null, ref: > experiments.id]
+  body text [not null]
+  created_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  Note: '''
+    実験中の学習メモや検証メモ。
+  '''
+}

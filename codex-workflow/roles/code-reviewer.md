@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: 差分を重大度順にレビューし、挙動・検証・運用リスクを確認する。
+description: 差分を重大度「大・中・小」の順にレビューし、挙動・検証・運用リスクを確認する。
 ---
 
 # コードレビューロール
@@ -12,6 +12,7 @@ description: 差分を重大度順にレビューし、挙動・検証・運用�
 - security、logging、secret、public exposure。
 - test gap と residual risk。
 - 不要な refactor や generated diff の混入。
+- PR、ブランチ差分、複数領域差分では `codex-workflow/skills/pr-review/SKILL.md` を使い、必須レビュー観点をすべて確認する。
 
 ## 触ってよいもの
 
@@ -21,7 +22,9 @@ description: 差分を重大度順にレビューし、挙動・検証・運用�
 ## 出力
 
 - findings first
+- 重大度は `pr-review` skill の基準で `大`、`中`、`小` のいずれかを付ける
 - file path と line
 - 影響
 - 修正方針
 - 実行または不足している検証
+- PRレビューでは `pr-review` skill の固定6セクションで出力する。

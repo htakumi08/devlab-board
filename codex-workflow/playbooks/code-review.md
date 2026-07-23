@@ -1,11 +1,15 @@
 ---
 name: code-review
-description: 差分レビュー、自己レビュー、サブエージェント成果物の確認に使う。
+description: PRレビュー、ブランチ差分レビュー、自己レビュー、サブエージェント成果物の確認に使う。
 ---
 
 # コードレビュープレイブック
 
 ## 見る順番
+
+PR、ブランチ差分、複数領域にまたがる差分、または固定フォーマットのレビュー結果が必要な場合は、先に `codex-workflow/skills/pr-review/SKILL.md` を読む。
+
+PRレビューでは、可能な範囲で PR 目的、base/head、変更ファイル一覧、未解決 review comment、CI/checks、関連 Issue または docs を確認する。
 
 1. 依頼された挙動と差分が一致しているか。
 2. API contract、DB schema、AWS 構成、docs に矛盾がないか。
@@ -13,14 +17,17 @@ description: 差分レビュー、自己レビュー、サブエージェント�
 4. security、secret、logging、public exposure の問題がないか。
 5. テストまたは検証が変更リスクに見合っているか。
 6. 不要な refactor、generated diff、local dependency が混ざっていないか。
+7. `pr-review` skill を使う場合は、必須レビュー観点をすべて確認し、`codex-workflow/skills/pr-review/references/severity-levels.md` で重大度を判定して、`codex-workflow/skills/pr-review/references/report-template.md` の6セクションで出力する。
 
 ## 指摘の書き方
 
-- findings を重大度順に出す。
+- findings を重大度 `大`、`中`、`小` の順に出す。
+- 重大度は修正工数ではなく実害で判定し、好みだけの提案は指摘にしない。
 - file path と line を具体的に示す。
 - 挙動への影響を説明する。
 - 修正方針は短く具体的に書く。
 - 問題がない場合は、残っている test gap または residual risk を明示する。
+- PRレビューでは `重大度` / `指摘種別` / `対象ファイル` / `指摘内容` / `影響` / `根拠` / `修正方針` を含む表を先頭に置く。
 
 ## サブエージェント成果物の確認
 

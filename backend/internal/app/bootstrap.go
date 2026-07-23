@@ -16,6 +16,9 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// このファイルは、DB、migration、session store、UserStore、HTTP handler を初期化して Server に組み立てる。
+// main.go を起動責務に保ち、外部リソースの初期化と依存関係の結線を一か所に集約するために分離している。
+
 type Server struct {
 	Handler http.Handler
 	DB      *sql.DB

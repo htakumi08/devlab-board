@@ -18,6 +18,7 @@ backend/
       app.go
       bootstrap.go
       config.go
+      doc.go
       user_store.go
       validation.go
 ```
@@ -37,6 +38,7 @@ go run ./cmd/api
 - `POST /api/auth/logout`: session を破棄する
 - `GET /api/auth/me`: ログイン中ユーザを返す
 - `GET /api/dashboard`: session 認証済み API の疎通確認
+- `GET /api/user-agent`: request の User-Agent を返す
 
 `/api/auth/register` と `/api/auth/login` 以外の `/api/` endpoint は session 認証を必要とする。
 

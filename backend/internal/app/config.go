@@ -5,6 +5,9 @@ import (
 	"strconv"
 )
 
+// このファイルは、実行環境の環境変数を Config へ集約し、型付きの設定として提供する。
+// 起動処理や handler が環境変数を直接参照せず、環境差分と既定値を一か所で管理するために分離している。
+
 type Config struct {
 	AppEnv              string
 	DatabaseURL         string

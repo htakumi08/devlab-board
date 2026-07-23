@@ -58,6 +58,7 @@ flowchart TD
 - `playbooks/`: 計画、機能実装、ドキュメント運用、検証、レビュー、インフラ変更、フロントエンドリリースの手順。
 - `roles/`: サブエージェントに渡すときの責務境界。
 - `skills/`: Go HTTP API、React TypeScript、Terraform AWS、documentation workflow の反復作業向けガイド。
+- `skills/pr-review/`: PR、ブランチ差分、実装差分を必須観点と重大度「大・中・小」付きの固定フォーマットでレビューするガイド。
 
 ## ワークフロー構成
 

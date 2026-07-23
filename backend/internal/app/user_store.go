@@ -13,6 +13,9 @@ import (
 	"github.com/lib/pq"
 )
 
+// このファイルは、ユーザーのデータ構造と保存操作を定義し、PostgreSQL 用とテスト用メモリ実装を提供する。
+// HTTP handler から SQL を分離し、実行環境に応じて保存先を差し替えられるようにするために分離している。
+
 var (
 	ErrEmailExists        = errors.New("email already exists")
 	ErrInvalidCredential  = errors.New("invalid email or password")

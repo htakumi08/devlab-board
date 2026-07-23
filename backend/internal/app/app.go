@@ -10,6 +10,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// このファイルは、HTTP route、session 認証、各 handler、JSON response の境界をまとめる。
+// リクエスト処理の入口と出口を一か所で追えるようにし、起動処理やデータ保存処理から分離している。
+
 const sessionUserIDKey = "user_id"
 
 type App struct {
@@ -40,6 +43,10 @@ type authResponse struct {
 	User userResponse `json:"user"`
 }
 
+type userAgentResponse struct {
+	UserAgent string `json:"userAgent"`
+}
+
 func New(config Config, users UserStore, sessions *scs.SessionManager) *App {
 	return &App{
 		config:   config,
@@ -63,6 +70,7 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("POST /api/auth/logout", a.requireSession(http.HandlerFunc(a.handleLogout)))
 	mux.Handle("GET /api/auth/me", a.requireSession(http.HandlerFunc(a.handleMe)))
 	mux.Handle("GET /api/dashboard", a.requireSession(http.HandlerFunc(a.handleDashboard)))
+	mux.Handle("GET /api/user-agent", a.requireSession(http.HandlerFunc(a.handleUserAgent)))
 
 	return a.cors(a.sessions.LoadAndSave(mux))
 }
@@ -194,6 +202,10 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			{"label": "Role", "value": user.Role},
 		},
 	})
+}
+
+func (a *App) handleUserAgent(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, userAgentResponse{UserAgent: r.UserAgent()})
 }
 
 func (a *App) startSession(r *http.Request, userID int64) error {

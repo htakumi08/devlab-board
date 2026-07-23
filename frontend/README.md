@@ -40,6 +40,7 @@ frontend/
 - `/` には Overview と Session を表示する
 - 実験機能は `/user-agent-lab` のように機能ごとの URL と画面を持たせる
 - サイドバーは各画面で共通表示し、メイン領域を React Router で切り替える
+- サイドバーの開閉状態は `useState` で管理し、ページ再読み込み時は開いた状態に戻す
 - component、hook、API client は必要になった時点で追加する
 - バックエンドとの接続は、最初の API 契約が決まってから戻す
 - S3 + CloudFront 配信では、各 URL への直接アクセスを `index.html` に戻す SPA fallback を設定する

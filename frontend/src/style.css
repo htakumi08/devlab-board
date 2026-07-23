@@ -268,9 +268,14 @@ h4 {
 }
 
 .app-shell {
+  position: relative;
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
   min-height: 100vh;
+}
+
+.app-shell.sidebar-closed {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sidebar {
@@ -280,7 +285,51 @@ h4 {
   border-right: 1px solid var(--line);
   background: var(--nav);
   color: #ffffff;
-  padding: 28px 20px;
+  padding: 76px 20px 28px;
+}
+
+.sidebar[hidden] {
+  display: none;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  z-index: 1;
+  top: 20px;
+  left: 20px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #cbd5e1;
+  padding: 0;
+}
+
+.sidebar-toggle svg {
+  width: 24px;
+  height: 24px;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.sidebar-closed .sidebar-toggle {
+  color: var(--muted);
+}
+
+.sidebar-closed .sidebar-toggle:hover {
+  background: rgba(23, 32, 51, 0.08);
+  color: var(--ink);
+}
+
+.sidebar-toggle:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 2px;
 }
 
 .nav-list {
@@ -310,6 +359,10 @@ h4 {
   align-content: start;
   gap: 22px;
   padding: 32px;
+}
+
+.sidebar-closed .workspace {
+  padding-top: 84px;
 }
 
 .page-header {
@@ -561,7 +614,7 @@ h4 {
 
   .sidebar {
     gap: 18px;
-    padding: 20px;
+    padding: 68px 20px 20px;
   }
 
   .nav-list {

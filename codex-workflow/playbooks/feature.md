@@ -8,7 +8,7 @@ description: Go API と React UI を縦に通す境界の明確な機能を実�
 1. ユーザーワークフローと実験機能の目的を確認する。
 2. API boundary、request、response、error shape、DB の要否を定義する。
 3. Go backend の handler、use case、test を実装する。
-4. React の API client、状態、UI、loading/error/empty state を実装する。
+4. React の状態を local / global / server に分類し、API client、UI、loading/error/empty state を実装する。
 5. Docker Compose、環境変数、AWS 構成に影響があるか確認する。
 6. 実装完了前に、コメントと docstring が運用ルールに沿っているか見直す。
 7. 契約や決定事項が安定したら docs を更新する。

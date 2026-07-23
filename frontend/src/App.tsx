@@ -31,6 +31,7 @@ export function App() {
   const [cards, setCards] = useState<DashboardCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [message, setMessage] = useState("");
 
   const passwordValid = useMemo(() => validatePassword(password), [password]);
@@ -195,10 +196,38 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell${isSidebarOpen ? "" : " sidebar-closed"}`}>
       <ScrollToHash />
 
-      <aside className="sidebar" aria-label="Primary navigation">
+      <button
+        aria-controls="primary-sidebar"
+        aria-expanded={isSidebarOpen}
+        aria-label={isSidebarOpen ? "サイドバーを閉じる" : "サイドバーを開く"}
+        className="sidebar-toggle"
+        title={isSidebarOpen ? "サイドバーを閉じる" : "サイドバーを開く"}
+        type="button"
+        onClick={() => setIsSidebarOpen((current) => !current)}
+      >
+        <svg aria-hidden="true" fill="none" focusable="false" viewBox="0 0 24 24">
+          <rect
+            height="16"
+            rx="3"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            width="17"
+            x="3.5"
+            y="4"
+          />
+          <path d="M9 4.5v15" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+      </button>
+
+      <aside
+        className="sidebar"
+        hidden={!isSidebarOpen}
+        id="primary-sidebar"
+        aria-label="Primary navigation"
+      >
         <div>
           <p className="brand-label">devlab</p>
           <h1>Board</h1>

@@ -31,6 +31,8 @@ backend/tmp/
 infra/.terraform/
 infra/**/*.tfstate
 infra/**/*.tfstate.*
+infra/**/*.tfplan
+infra/**/*.tfvars
 infra/**/crash.log
 infra/**/.terraform.lock.hcl.tmp
 infra/**/override.tf

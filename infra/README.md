@@ -12,6 +12,7 @@
 - `../codex-workflow/README.md`
 - `../codex-workflow/AGENTS.md`
 - `./AGENTS.md`
+- `../docs/runbooks/ecs-fargate-minimum-handson.md`: Terraform 導入から ECS Fargate 最小構成の作成・確認・削除まで
 
 ## ディレクトリ構成
 

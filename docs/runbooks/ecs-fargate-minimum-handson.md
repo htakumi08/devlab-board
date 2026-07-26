@@ -1,7 +1,7 @@
 ---
 title: Terraform ではじめる ECS Fargate 最小構成ハンズオン
 status: draft
-last_updated: 2026-07-23
+last_updated: 2026-07-24
 audience: Terraform と ECS Fargate を初めて構築する開発者
 ---
 
@@ -42,6 +42,8 @@ audience: Terraform と ECS Fargate を初めて構築する開発者
 今回作るコンテナは、まず AWS 公式手順でも利用されている ECR Public 上の Apache HTTP Server イメージとする。`devlab-board` の Go コンテナを ECR へ登録する作業は次のハンズオンに分ける。
 
 ## 2. 今回の構成と割り切り
+
+編集可能な構成図は [`ecs-fargate-minimum-handson-architecture.drawio`](./ecs-fargate-minimum-handson-architecture.drawio) を参照する。
 
 ```mermaid
 flowchart LR
@@ -789,6 +791,7 @@ terraform apply
 
 | 日付 | 内容 |
 | --- | --- |
+| 2026-07-24 | 編集可能な Draw.io 構成図へのリンクを追加 |
 | 2026-07-23 | Terraform 導入から ECS Fargate 最小構成の作成・確認・削除までを新規作成 |
 
 ## 16. 要確認・ヒアリング項目
@@ -800,4 +803,3 @@ terraform apply
 - 次は ECR + Go backend を先に扱うか、ALB + 2 AZ を先に扱うか
 - dev 環境を常時稼働させるか、学習ごとに destroy するか
 - remote state 用 S3 bucket を別 bootstrap 構成として管理するか
-

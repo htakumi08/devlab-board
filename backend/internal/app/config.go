@@ -10,6 +10,8 @@ import (
 
 type Config struct {
 	AppEnv              string
+	HTTPPort            string
+	GRPCPort            string
 	DatabaseURL         string
 	FrontendOrigin      string
 	SessionStore        string
@@ -22,6 +24,8 @@ type Config struct {
 func LoadConfig() Config {
 	return Config{
 		AppEnv:              envOrDefault("APP_ENV", "local"),
+		HTTPPort:            envOrDefault("PORT", "8080"),
+		GRPCPort:            envOrDefault("GRPC_PORT", "50051"),
 		DatabaseURL:         os.Getenv("DATABASE_URL"),
 		FrontendOrigin:      envOrDefault("FRONTEND_ORIGIN", "http://localhost:30101"),
 		SessionStore:        envOrDefault("SESSION_STORE", "postgres"),

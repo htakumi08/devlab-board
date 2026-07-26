@@ -16,7 +16,10 @@ description: Vite + React + TypeScript の画面、component、API client を追
 
 - components は focused かつ typed に保つ。
 - API response の前提は画面ごとに散らさず boundary へ寄せる。
-- cross-route state が繰り返し必要になるまで app-wide state は避ける。
+- local state は `useState`、共有する client state は Jotai の Atom、server state は TanStack Query を使う。
+- server state を Atom や `useState` へ重複保存しない。
+- cross-route state が必要になるまで Jotai を導入しない。
+- API data の取得を実装する段階で TanStack Query を導入する。
 - loading、empty、error、offline state を必要な範囲で扱う。
 - static build constraints と public env vars を意識する。
 - accessibility basics を保つ。

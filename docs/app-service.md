@@ -24,6 +24,18 @@
 - Go backend の簡単な JSON API
 - Docker Compose によるローカル起動
 
+### 3.1 画面ルーティング
+
+サイドバーは共通レイアウトとして維持し、実験機能は専用 URL でメイン領域へ表示する。
+
+- `/`: Overview と Session
+- `/user-agent-lab`: User-Agent Lab
+- 未定義の URL: `/` へ戻す
+
+User-Agent Lab では、`navigator.userAgent` と Go が受け取った HTTP `User-Agent` を比較し、任意の marker が含まれるか確認する。今後追加する実験機能も、同じ方針で専用 URL と画面コンポーネントを持たせる。
+
+Vite の開発サーバーでは直接 URL を開ける。S3 + CloudFront 配信では、`/user-agent-lab` などへの直接アクセスを `index.html` へ戻す SPA fallback が必要になる。
+
 ## 4. 実験機能の候補
 
 - API 疎通確認パネル

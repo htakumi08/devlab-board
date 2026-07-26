@@ -1,4 +1,8 @@
-# Frontend React ルール
+#frontendについて
+
+状態管理の戦略ってどこかに記載されていますか？
+
+ローカル状態管理: Frontend React ルール
 
 ## 構成
 
@@ -24,6 +28,14 @@
 - 複数画面で繰り返し必要になるまで、広範な global state は避ける。
 - label、keyboard operation、focus、semantic controls など accessibility basics を保つ。
 - UI は学習の邪魔になる過剰な装飾を避け、ダッシュボードとして情報を読み取りやすくする。
+
+## 状態管理
+
+- component 内で完結する状態は `useState` を使う。
+- 複数の component や画面で共有する client state は Jotai の Atom を使う。
+- API 由来の server state は TanStack Query を使う。
+- server state を Atom や `useState` へ重複保存しない。
+- 実装前に各状態を分類し、必要になるまで Jotai と TanStack Query を追加しない。
 
 ## コメント / Docstring
 

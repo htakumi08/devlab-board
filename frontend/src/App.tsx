@@ -1,4 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+
+import { UserAgentLab } from "./features/user-agent/UserAgentLab";
+import { apiFetch } from "./lib/api";
 
 type User = {
   id: string;
@@ -19,8 +23,6 @@ type ApiError = {
   };
 };
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:30102";
-
 export function App() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -29,6 +31,7 @@ export function App() {
   const [cards, setCards] = useState<DashboardCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [message, setMessage] = useState("");
 
   const passwordValid = useMemo(() => validatePassword(password), [password]);
@@ -193,84 +196,171 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar" aria-label="Primary navigation">
+    <main className={`app-shell${isSidebarOpen ? "" : " sidebar-closed"}`}>
+      <ScrollToHash />
+
+      <button
+        aria-controls="primary-sidebar"
+        aria-expanded={isSidebarOpen}
+        aria-label={isSidebarOpen ? "サイドバーを閉じる" : "サイドバーを開く"}
+        className="sidebar-toggle"
+        title={isSidebarOpen ? "サイドバーを閉じる" : "サイドバーを開く"}
+        type="button"
+        onClick={() => setIsSidebarOpen((current) => !current)}
+      >
+        <svg aria-hidden="true" fill="none" focusable="false" viewBox="0 0 24 24">
+          <rect
+            height="16"
+            rx="3"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            width="17"
+            x="3.5"
+            y="4"
+          />
+          <path d="M9 4.5v15" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+      </button>
+
+      <aside
+        className="sidebar"
+        hidden={!isSidebarOpen}
+        id="primary-sidebar"
+        aria-label="Primary navigation"
+      >
         <div>
           <p className="brand-label">devlab</p>
           <h1>Board</h1>
         </div>
 
         <nav className="nav-list" aria-label="Sections">
-          <a className="nav-item active" href="#overview">
+          <NavLink className={navItemClassName} end to="/">
             Overview
-          </a>
-          <a className="nav-item" href="#session">
+          </NavLink>
+          <Link className="nav-item" to="/#session">
             Session
-          </a>
+          </Link>
+          <NavLink className={navItemClassName} to="/user-agent-lab">
+            User-Agent Lab
+          </NavLink>
         </nav>
       </aside>
 
-      <section className="workspace" id="overview">
-        <header className="page-header">
-          <div>
-            <p className="eyebrow">Authenticated workspace</p>
-            <h2>開発状況ダッシュボード</h2>
-          </div>
-          <button className="secondary-button" type="button" onClick={handleLogout}>
-            Logout
-          </button>
-        </header>
-
-        <section className="summary-grid" aria-label="Authenticated API summary">
-          {cards.map((item) => (
-            <article className="summary-card" key={item.label}>
-              <p>{item.label}</p>
-              <strong>{item.value}</strong>
-            </article>
-          ))}
-        </section>
-
-        <section className="content-grid">
-          <article className="panel" id="session">
-            <div className="panel-header">
-              <h3>Session</h3>
-              <span>scs</span>
-            </div>
-            <div className="profile-row">
-              <span>{user.name.slice(0, 1).toUpperCase()}</span>
-              <div>
-                <strong>{user.email}</strong>
-                <p>Role: {user.role}</p>
-              </div>
-            </div>
-          </article>
-
-          <article className="panel">
-            <div className="panel-header">
-              <h3>Next Tasks</h3>
-              <span>auth</span>
-            </div>
-            <ol className="task-list">
-              <li>CSRF token の導入方針を決める</li>
-              <li>ECS Fargate + Redis の構成を設計する</li>
-              <li>ログイン監査ログの要否を決める</li>
-            </ol>
-          </article>
-        </section>
+      <section className="workspace">
+        <Routes>
+          <Route
+            path="/"
+            element={<OverviewPage cards={cards} onLogout={handleLogout} user={user} />}
+          />
+          <Route
+            path="/user-agent-lab"
+            element={<UserAgentLabPage onLogout={handleLogout} />}
+          />
+          <Route path="*" element={<Navigate replace to="/" />} />
+        </Routes>
       </section>
     </main>
   );
 }
 
-async function apiFetch(path: string, init: RequestInit = {}) {
-  return fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
-  });
+type OverviewPageProps = {
+  cards: DashboardCard[];
+  onLogout: () => Promise<void>;
+  user: User;
+};
+
+function OverviewPage({ cards, onLogout, user }: OverviewPageProps) {
+  return (
+    <>
+      <header className="page-header" id="overview">
+        <div>
+          <p className="eyebrow">Authenticated workspace</p>
+          <h2>開発状況ダッシュボード</h2>
+        </div>
+        <button className="secondary-button" type="button" onClick={() => void onLogout()}>
+          Logout
+        </button>
+      </header>
+
+      <section className="summary-grid" aria-label="Authenticated API summary">
+        {cards.map((item) => (
+          <article className="summary-card" key={item.label}>
+            <p>{item.label}</p>
+            <strong>{item.value}</strong>
+          </article>
+        ))}
+      </section>
+
+      <section className="content-grid">
+        <article className="panel" id="session">
+          <div className="panel-header">
+            <h3>Session</h3>
+            <span>scs</span>
+          </div>
+          <div className="profile-row">
+            <span>{user.name.slice(0, 1).toUpperCase()}</span>
+            <div>
+              <strong>{user.email}</strong>
+              <p>Role: {user.role}</p>
+            </div>
+          </div>
+        </article>
+
+        <article className="panel">
+          <div className="panel-header">
+            <h3>Next Tasks</h3>
+            <span>auth</span>
+          </div>
+          <ol className="task-list">
+            <li>CSRF token の導入方針を決める</li>
+            <li>ECS Fargate + Redis の構成を設計する</li>
+            <li>ログイン監査ログの要否を決める</li>
+          </ol>
+        </article>
+      </section>
+    </>
+  );
+}
+
+function UserAgentLabPage({ onLogout }: { onLogout: () => Promise<void> }) {
+  return (
+    <>
+      <header className="page-header">
+        <div>
+          <p className="eyebrow">Experiment workspace</p>
+          <h2>User-Agent Lab</h2>
+        </div>
+        <button className="secondary-button" type="button" onClick={() => void onLogout()}>
+          Logout
+        </button>
+      </header>
+
+      <UserAgentLab />
+    </>
+  );
+}
+
+function ScrollToHash() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.hash === "") {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      target?.scrollIntoView();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.hash, location.pathname]);
+
+  return null;
+}
+
+function navItemClassName({ isActive }: { isActive: boolean }) {
+  return `nav-item${isActive ? " active" : ""}`;
 }
 
 function validateEmail(value: string) {

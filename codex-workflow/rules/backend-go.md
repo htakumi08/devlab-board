@@ -26,6 +26,7 @@
 ## コメント / Docstring
 
 - exported function、type、package には、人間が責務を追いやすいよう必要に応じてコメントを付ける。
+- 複数ファイルにまたがる package では、目的、責務の境界、分離理由を `doc.go` の package comment に残す。
 - 認可、状態遷移、idempotency、transaction、context timeout など、読み違えやすい箇所は意図を短く残す。
 - Go の文法学習メモは、長くなる場合はコードコメントではなく docs または学習メモへ移す。
 - 自明な代入、単純な mux 登録、1 行ごとの言い換えコメントは避ける。

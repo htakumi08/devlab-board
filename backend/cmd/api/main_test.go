@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// テストケース：GET /healthz が正常なJSONを返すこと
 func TestHealthz(t *testing.T) {
 	t.Setenv("APP_ENV", "test")
 

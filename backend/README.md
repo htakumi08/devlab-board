@@ -29,6 +29,39 @@ backend/
 go run ./cmd/api
 ```
 
+Docker Composeを使う場合は、リポジトリルートで実行する。
+
+```bash
+docker compose up -d --build backend
+```
+
+## gRPC
+
+backendプロセスは、HTTPの8080番とgRPCの50051番を同時に待ち受ける。
+ローカルのDocker Composeでは、gRPCを`127.0.0.1:30104`へ公開する。
+
+Docker環境へ固定バージョンの`grpcurl`を導入しているため、次の順番で確認できる。
+
+```bash
+# Reflectionを使って、公開されているサービスを一覧表示する。
+docker compose exec backend \
+  grpcurl -plaintext 127.0.0.1:50051 list
+
+# GreetingServiceのRPC定義を表示する。
+docker compose exec backend \
+  grpcurl -plaintext 127.0.0.1:50051 \
+  describe grpclab.v1.GreetingService
+
+# Hello RPCへJSON形式のリクエストを送る。
+docker compose exec backend \
+  grpcurl -plaintext \
+  -d '{"name":"Taro"}' \
+  127.0.0.1:50051 \
+  grpclab.v1.GreetingService/Hello
+```
+
+`-plaintext`は、ローカル学習環境でTLSを使わず接続する指定である。本番環境では使用しない。
+
 ## エンドポイント
 
 - `GET /`: バックエンドの起動確認

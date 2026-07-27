@@ -213,6 +213,12 @@ volume_key_for_service() {
   esac
 }
 
+# image参照を完全なsha256形式へ統一し、取得元による短縮表記の違いをなくす。
+canonical_image_id() {
+  image_reference=$1
+  docker image inspect --format '{{.Id}}' "$image_reference" 2>/dev/null || true
+}
+
 # コンテナやCompose labelから、選択したサービスに関係するimage IDを集める。
 service_image_ids() {
   service=$1
@@ -222,15 +228,20 @@ service_image_ids() {
     --filter "label=com.docker.compose.service=$service")
 
   for container_id in $container_ids; do
-    docker container inspect --format '{{.Image}}' "$container_id"
+    image_reference=$(docker container inspect --format '{{.Image}}' "$container_id")
+    canonical_image_id "$image_reference"
   done
 
-  docker image ls --quiet \
+  image_references=$(docker image ls --quiet \
     --filter "label=com.docker.compose.project=$PROJECT_NAME" \
-    --filter "label=com.docker.compose.service=$service"
+    --filter "label=com.docker.compose.service=$service")
+
+  for image_reference in $image_references; do
+    canonical_image_id "$image_reference"
+  done
 
   if [ "$service" = "db" ]; then
-    docker image inspect --format '{{.Id}}' postgres:18-alpine 2>/dev/null || true
+    canonical_image_id postgres:18-alpine
   fi
 }
 
@@ -253,7 +264,12 @@ cleanup_service() {
   done
 
   for image_id in $image_ids; do
-    docker image rm "$image_id"
+    # 複数の取得元が同じimageを指した場合や、直前に削除済みの場合は安全にスキップする。
+    if docker image inspect "$image_id" >/dev/null 2>&1; then
+      docker image rm "$image_id"
+    else
+      printf 'Image already absent; skipping: %s\n' "$image_id"
+    fi
   done
 
   remaining_containers=$(docker container ls --all --quiet \

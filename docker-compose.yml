@@ -22,12 +22,16 @@ services:
       dockerfile: Dockerfile
     container_name: devlab-board-backend
     working_dir: /app
-    command: sh -c "go run ./cmd/api"
+    # アプリ内の10秒shutdown期限より長く待ち、強制終了へ切り替わる前に後片付けを完了させる。
+    stop_grace_period: 15s
     ports:
       - "${BACKEND_PORT}:${BACKEND_APP_PORT}"
+      # gRPCはplaintextとReflectionを使う学習環境のため、ホスト自身からだけ接続できるようにする。
+      - "127.0.0.1:${GRPC_PORT:-30104}:${GRPC_APP_PORT:-50051}"
     environment:
       APP_ENV: ${APP_ENV}
       PORT: ${BACKEND_APP_PORT}
+      GRPC_PORT: ${GRPC_APP_PORT:-50051}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:30101}
       SESSION_STORE: ${SESSION_STORE:-postgres}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}

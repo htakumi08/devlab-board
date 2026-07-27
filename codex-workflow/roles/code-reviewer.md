@@ -12,7 +12,8 @@ description: 差分を重大度「大・中・小」の順にレビューし、�
 - security、logging、secret、public exposure。
 - test gap と residual risk。
 - 不要な refactor や generated diff の混入。
-- PR、ブランチ差分、複数領域差分では `codex-workflow/skills/pr-review/SKILL.md` を使い、必須レビュー観点をすべて確認する。
+- PR、ブランチ差分、複数領域差分では `.agents/skills/pr-review/SKILL.md` を使い、必須レビュー観点をすべて確認する。
+- GitHub PR URLのレビューでは、reviewed base/head SHAと投稿先を固定し、skillの規約どおり `COMMENT` レビューを投稿する。
 
 ## 触ってよいもの
 

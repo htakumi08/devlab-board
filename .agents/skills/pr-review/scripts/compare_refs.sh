@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+# Compare committed refs without changing the current checkout.
 usage() {
   echo "Usage: $0 <base_ref> <review_ref> [repo_dir]" >&2
 }

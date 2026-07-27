@@ -7,9 +7,11 @@ description: PRレビュー、ブランチ差分レビュー、自己レビュ�
 
 ## 見る順番
 
-PR、ブランチ差分、複数領域にまたがる差分、または固定フォーマットのレビュー結果が必要な場合は、先に `codex-workflow/skills/pr-review/SKILL.md` を読む。
+PR、ブランチ差分、複数領域にまたがる差分、または固定フォーマットのレビュー結果が必要な場合は、先に `.agents/skills/pr-review/SKILL.md` を読む。
 
 PRレビューでは、可能な範囲で PR 目的、base/head、変更ファイル一覧、未解決 review comment、CI/checks、関連 Issue または docs を確認する。
+
+GitHub PR URLとレビュー依頼を受けた場合は、`pr-review` skillのGitHub PRレビュー・投稿モードを使う。対象PRを明示し、reviewed base/head SHAを固定して、既定では `COMMENT` レビューを投稿する。投稿しない指定がある場合はGitHubへ書き込まない。
 
 1. 依頼された挙動と差分が一致しているか。
 2. API contract、DB schema、AWS 構成、docs に矛盾がないか。
@@ -17,7 +19,7 @@ PRレビューでは、可能な範囲で PR 目的、base/head、変更ファ�
 4. security、secret、logging、public exposure の問題がないか。
 5. テストまたは検証が変更リスクに見合っているか。
 6. 不要な refactor、generated diff、local dependency が混ざっていないか。
-7. `pr-review` skill を使う場合は、必須レビュー観点をすべて確認し、`codex-workflow/skills/pr-review/references/severity-levels.md` で重大度を判定して、`codex-workflow/skills/pr-review/references/report-template.md` の6セクションで出力する。
+7. `pr-review` skill を使う場合は、必須レビュー観点をすべて確認し、`.agents/skills/pr-review/references/severity-levels.md` で重大度を判定して、`.agents/skills/pr-review/references/report-template.md` の6セクションで出力する。
 
 ## 指摘の書き方
 

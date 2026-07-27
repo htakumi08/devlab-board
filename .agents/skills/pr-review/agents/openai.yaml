@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Review"
+  short_description: "GitHub PRを精査し安全にCOMMENTレビューを投稿"
+  default_prompt: "Use $pr-review to review this GitHub PR URL and post the result as a COMMENT review."

@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+# Search related code without modifying the repository.
 usage() {
   echo "Usage: $0 <keyword> [repo_dir]" >&2
 }

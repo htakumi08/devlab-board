@@ -27,11 +27,11 @@ services:
     ports:
       - "${BACKEND_PORT}:${BACKEND_APP_PORT}"
       # gRPCはplaintextとReflectionを使う学習環境のため、ホスト自身からだけ接続できるようにする。
-      - "127.0.0.1:${GRPC_PORT}:${GRPC_APP_PORT}"
+      - "127.0.0.1:${GRPC_PORT:-30104}:${GRPC_APP_PORT:-50051}"
     environment:
       APP_ENV: ${APP_ENV}
       PORT: ${BACKEND_APP_PORT}
-      GRPC_PORT: ${GRPC_APP_PORT}
+      GRPC_PORT: ${GRPC_APP_PORT:-50051}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:30101}
       SESSION_STORE: ${SESSION_STORE:-postgres}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}

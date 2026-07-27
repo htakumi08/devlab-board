@@ -32,6 +32,7 @@ DB 方針は PostgreSQL を正とします。ローカル開発の `docker-compo
 - 大きな先回りより、1 機能 / 1 endpoint / 1 画面の小さな縦切りを優先する。
 - ユーザー向け挙動、API contract、DB schema、AWS 構成、CI/CD、運用手順は設計決定として扱い、安定したら docs に残す。
 - docs を作成・更新するときは `codex-workflow/playbooks/documentation.md` と `codex-workflow/rules/documentation.md` を使う。
+- Codex が明示起動・自動発見する project skill は `.agents/skills/` に置き、workflow 内部からだけ使う補助ガイドは `codex-workflow/skills/` に置く。
 - 生成物、local dependency、credentials、Terraform state、個人環境のログは commit しない。
 - サブエージェントを使う場合は、`codex-workflow/roles/` で責務と触ってよい範囲を明確にする。
 
@@ -41,6 +42,7 @@ DB 方針は PostgreSQL を正とします。ローカル開発の `docker-compo
 - `frontend/`: Vite + React + TypeScript app
 - `infra/`: Terraform modules and environment definitions
 - `docs/`: application design、DB design、architecture、runbooks、implementation notes
+- `.agents/skills/`: Codex が自動発見する repository 固有 skill
 - `codex-workflow/`: Codex rules、playbooks、roles、compact skills
 
 ## バックエンド制約

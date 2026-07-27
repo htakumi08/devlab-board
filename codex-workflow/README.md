@@ -9,6 +9,7 @@
 - Terraform による AWS IaC
 - EC2 Auto Scaling、Serverless、ECS Fargate の構成比較
 - docs 配下の設計、DB、運用、実装メモの作成・更新
+- GitHub PRを取得・レビューし、COMMENTレビューを投稿するrepository skill
 - 境界が明確なサブエージェント作業向けの短いロール
 - 計画、実装、検証、レビュー、ドキュメント、リリース準備向けの短いプレイブック
 
@@ -22,6 +23,10 @@ codex-workflow/
 |-- playbooks/
 |-- roles/
 `-- skills/
+
+.agents/
+`-- skills/
+    `-- pr-review/
 ```
 
 ## アーキテクチャ
@@ -37,7 +42,8 @@ flowchart TD
   LocalGuide --> Rules[rules/<br/>常時参照する判断基準]
   LocalGuide --> Playbooks[playbooks/<br/>作業別の進め方]
   LocalGuide --> Roles[roles/<br/>サブエージェント分担]
-  LocalGuide --> Skills[skills/<br/>繰り返し使う専門知識]
+  LocalGuide --> Skills[skills/<br/>workflow 内部の補助ガイド]
+  LocalGuide --> RepoSkills[../.agents/skills/<br/>自動発見する repository skill]
 
   Rules --> Backend[Go HTTP API<br/>backend/]
   Rules --> Frontend[React + TypeScript<br/>frontend/]
@@ -47,6 +53,7 @@ flowchart TD
   Playbooks --> Work[実装・検証・レビュー]
   Roles --> Work
   Skills --> Work
+  RepoSkills --> Work
   Work --> Handoff[結果報告・引き継ぎ]
 ```
 
@@ -57,8 +64,8 @@ flowchart TD
 - `rules/`: Go、React、Terraform、AWS、documentation、security、testing などの継続的な判断基準。
 - `playbooks/`: 計画、機能実装、ドキュメント運用、検証、レビュー、インフラ変更、フロントエンドリリースの手順。
 - `roles/`: サブエージェントに渡すときの責務境界。
-- `skills/`: Go HTTP API、React TypeScript、Terraform AWS、documentation workflow の反復作業向けガイド。
-- `skills/pr-review/`: PR、ブランチ差分、実装差分を必須観点と重大度「大・中・小」付きの固定フォーマットでレビューするガイド。
+- `skills/`: Go HTTP API、React TypeScript、Terraform AWS、documentation workflow のworkflow内部向けガイド。
+- `../.agents/skills/pr-review/`: GitHub PR URL、PR、ブランチ差分、実装差分を固定観点でレビューし、GitHub PRではCOMMENTレビューを投稿するrepository skill。
 
 ## ワークフロー構成
 
@@ -75,7 +82,7 @@ flowchart LR
   PlanBook --> SelectRules
 
   SelectRules --> NeedSkill{反復 workflow が必要?}
-  NeedSkill -- はい --> Skill[skills/ を読む]
+  NeedSkill -- はい --> Skill[.agents/skills/ または<br/>skills/ を読む]
   NeedSkill -- いいえ --> Implement[実装または文書更新]
   Skill --> Implement
 
@@ -93,12 +100,12 @@ flowchart LR
 1. まず `../AGENTS.md` を読む。
 2. タスクに合うルールまたはプレイブックだけを読む。
 3. サブエージェントを使うときだけ `roles/` を選ぶ。
-4. 反復して使う作業だけ `skills/` に昇格する。
+4. repositoryから直接呼び出す反復作業は `../.agents/skills/`、workflow内部の補助ガイドは `skills/` に置く。
 5. 新しい workflow ファイルは短く、プロジェクト固有に保つ。
 
 ## メンテナンスルール
 
 - このスタックで使わないルールは削除する。
 - 新しいルールを増やす前に、既存ルールの更新で足りるか確認する。
-- 繰り返し使う安定した習慣は `skills/` に昇格する。
+- 繰り返し使う安定したrepository workflowは `../.agents/skills/` に昇格する。
 - `node_modules`、`dist`、Terraform state、ネストした `.git`、local logs、ビルド成果物は commit しない。

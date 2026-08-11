@@ -193,5 +193,5 @@ func TestFinanceAccountsEndpointFailures(t *testing.T) {
 func newFinanceAccountsTestHandler(reader FinanceAccountReader) http.Handler {
 	sessionManager := scs.New()
 	sessionManager.Cookie.Name = "devlab_session"
-	return New(Config{AppEnv: "test"}, NewMemoryUserStore(), sessionManager, emptyFinanceSummaryReader{}, reader).Routes()
+	return New(Config{AppEnv: "test"}, NewMemoryUserStore(), sessionManager, emptyFinanceSummaryReader{}, reader, emptyFinanceTransactionReader{}).Routes()
 }

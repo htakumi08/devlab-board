@@ -387,6 +387,400 @@ func TestPostgresRepositoryAccountDetailHidesOtherOwners(t *testing.T) {
 	}
 }
 
+// TestPostgresRepositoryTransactionsPaginatesWithinOwner は、所有者を分離し同一日時でも2ページに重複・欠落がないことを確認する。
+// 必要な理由: keyset paginationが他ユーザー取引を漏らさず、内部IDによる安定順を維持するため。
+func TestPostgresRepositoryTransactionsPaginatesWithinOwner(t *testing.T) {
+	if os.Getenv("RUN_DB_TESTS") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run PostgreSQL integration tests")
+	}
+
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := platformpostgres.Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	ownerID := insertTestUser(t, ctx, tx, "transactions-owner")
+	otherID := insertTestUser(t, ctx, tx, "transactions-other")
+	ownerAccountID, ownerAccountPublicID := insertTestAccount(t, ctx, tx, ownerID, "JPY", 180000, 165000)
+	otherAccountID, _ := insertTestAccount(t, ctx, tx, otherID, "JPY", 999999, 999999)
+	sameOccurredAt := time.Date(2026, time.August, 11, 1, 5, 0, 0, time.UTC)
+	oldestID := insertNullableTestTransactionRecord(t, ctx, tx, ownerID, ownerAccountID, sameOccurredAt.Add(-time.Hour))
+	middleID := insertTestTransactionRecord(t, ctx, tx, transactionRecord{UserID: ownerID, AccountID: ownerAccountID, AuthorizedAt: sameOccurredAt})
+	newestID := insertTestTransactionRecord(t, ctx, tx, transactionRecord{UserID: ownerID, AccountID: ownerAccountID, AuthorizedAt: sameOccurredAt})
+	insertTestTransactionRecord(t, ctx, tx, transactionRecord{UserID: otherID, AccountID: otherAccountID, AuthorizedAt: sameOccurredAt.Add(time.Hour)})
+
+	repository := NewPostgresRepository(tx)
+	first, err := repository.Transactions(ctx, ownerID, transactionPageQuery{Limit: 2})
+	if err != nil {
+		t.Fatalf("get first transaction page: %v", err)
+	}
+	if !first.HasMore || len(first.Transactions) != 2 || first.Transactions[0].ID != newestID || first.Transactions[1].ID != middleID {
+		t.Fatalf("unexpected first page: %#v", first)
+	}
+	if first.Transactions[0].AccountID != ownerAccountPublicID || first.Transactions[0].AmountMinor != "4200" {
+		t.Fatalf("expected public account ID and decimal amount, got %#v", first.Transactions[0])
+	}
+
+	// 1ページ目末尾の公開IDをowner条件で解決して次ページを取得する。
+	cursorID := first.Transactions[len(first.Transactions)-1].ID
+	second, err := repository.Transactions(ctx, ownerID, transactionPageQuery{CursorPublicID: &cursorID, Limit: 2})
+	if err != nil {
+		t.Fatalf("get second transaction page: %v", err)
+	}
+	if second.HasMore || len(second.Transactions) != 1 || second.Transactions[0].ID != oldestID {
+		t.Fatalf("unexpected second page: %#v", second)
+	}
+	if second.Transactions[0].Merchant != nil || second.Transactions[0].Category != nil {
+		t.Fatalf("expected nullable merchant and category to remain null, got %#v", second.Transactions[0])
+	}
+}
+
+// TestPostgresRepositoryTransactionsHidesInvalidCursorOwners は、不存在と他所有者cursorを同じerrorへ正規化することを確認する。
+// 必要な理由: cursorから他ユーザー取引の存在を推測できないようrepositoryで所有者境界を強制するため。
+func TestPostgresRepositoryTransactionsHidesInvalidCursorOwners(t *testing.T) {
+	if os.Getenv("RUN_DB_TESTS") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run PostgreSQL integration tests")
+	}
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := platformpostgres.Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	ownerID := insertTestUser(t, ctx, tx, "transactions-cursor-owner")
+	otherID := insertTestUser(t, ctx, tx, "transactions-cursor-other")
+	otherAccountID, _ := insertTestAccount(t, ctx, tx, otherID, "JPY", 999999, 999999)
+	otherCursorID := insertTestTransactionRecord(t, ctx, tx, transactionRecord{UserID: otherID, AccountID: otherAccountID, AuthorizedAt: time.Now()})
+
+	cases := []struct {
+		name     string
+		cursorID string
+	}{
+		// 同じ所有者に存在しない公開IDをresource非開示errorにする。
+		{name: "missing", cursorID: testUUID(t)},
+		// 他所有者の公開IDもresource非開示errorにする。
+		{name: "other owner", cursorID: otherCursorID},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := NewPostgresRepository(tx).Transactions(ctx, ownerID, transactionPageQuery{CursorPublicID: &test.cursorID, Limit: 25})
+			if !errors.Is(err, ErrInvalidTransactionQuery) {
+				t.Fatalf("expected invalid query for cursor %q, got %v", test.cursorID, err)
+			}
+		})
+	}
+}
+
+// TestPostgresRepositoryTransactionsFiltersSortsAndPaginates は、全filterとoldest paginationを所有者境界内で組み合わせられることを確認する。
+// 必要な理由: Slice 3Bの各条件が同じoccurredAt定義を使い、filter済みページ間でも重複や欠落を起こさないため。
+func TestPostgresRepositoryTransactionsFiltersSortsAndPaginates(t *testing.T) {
+	if os.Getenv("RUN_DB_TESTS") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run PostgreSQL integration tests")
+	}
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := platformpostgres.Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	ownerID := insertTestUser(t, ctx, tx, "transactions-filter-owner")
+	otherID := insertTestUser(t, ctx, tx, "transactions-filter-other")
+	accountA := testUUID(t)
+	accountAID := insertTestAccountRecord(t, ctx, tx, testAccountRecord{
+		PublicID: accountA, UserID: ownerID, Name: "Filter Account A",
+		Status: "active", Currency: "JPY", Current: 100000, Available: int64Pointer(90000),
+	})
+	accountBID := insertTestAccountRecord(t, ctx, tx, testAccountRecord{
+		PublicID: testUUID(t), UserID: ownerID, Name: "Filter Account B",
+		Status: "active", Currency: "JPY", Current: 200000, Available: int64Pointer(190000),
+	})
+	otherAccountPublicID := testUUID(t)
+	otherAccountID := insertTestAccountRecord(t, ctx, tx, testAccountRecord{
+		PublicID: otherAccountPublicID, UserID: otherID, Name: "Other Filter Account",
+		Status: "active", Currency: "JPY", Current: 300000, Available: int64Pointer(290000),
+	})
+	base := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	oldestGroceriesID := insertFilterTransactionRecord(t, ctx, tx, filterTransactionRecord{
+		UserID: ownerID, AccountID: accountAID, Name: "Oldest groceries", Category: stringPointer("groceries"),
+		Direction: "debit", Status: "posted", AuthorizedAt: base,
+	})
+	transportationID := insertFilterTransactionRecord(t, ctx, tx, filterTransactionRecord{
+		UserID: ownerID, AccountID: accountAID, Name: "Transportation income", Category: stringPointer("transportation"),
+		Direction: "credit", Status: "pending", AuthorizedAt: base.AddDate(0, 0, 1),
+	})
+	uncategorizedID := insertFilterTransactionRecord(t, ctx, tx, filterTransactionRecord{
+		UserID: ownerID, AccountID: accountAID, Name: "Uncategorized reversal",
+		Direction: "debit", Status: "reversed", AuthorizedAt: base.AddDate(0, 0, 2),
+	})
+	firstTieID := insertFilterTransactionRecord(t, ctx, tx, filterTransactionRecord{
+		UserID: ownerID, AccountID: accountAID, Name: "First tie", Category: stringPointer("groceries"),
+		Direction: "debit", Status: "posted", AuthorizedAt: base.AddDate(0, 0, 2),
+	})
+	secondTieID := insertFilterTransactionRecord(t, ctx, tx, filterTransactionRecord{
+		UserID: ownerID, AccountID: accountAID, Name: "Second tie", Category: stringPointer("groceries"),
+		Direction: "debit", Status: "posted", AuthorizedAt: base.AddDate(0, 0, 2),
+	})
+	otherAccountGroceriesID := insertFilterTransactionRecord(t, ctx, tx, filterTransactionRecord{
+		UserID: ownerID, AccountID: accountBID, Name: "Other account groceries", Category: stringPointer("groceries"),
+		Direction: "debit", Status: "posted", AuthorizedAt: base.AddDate(0, 0, 3),
+	})
+	insertFilterTransactionRecord(t, ctx, tx, filterTransactionRecord{
+		UserID: otherID, AccountID: otherAccountID, Name: "Hidden other owner", Category: stringPointer("groceries"),
+		Direction: "debit", Status: "posted", AuthorizedAt: base.AddDate(0, 0, 4),
+	})
+
+	repository := NewPostgresRepository(tx)
+	dateFrom := base.AddDate(0, 0, 1)
+	dateToExclusive := base.AddDate(0, 0, 4)
+	groceries := "groceries"
+	debit := "debit"
+	posted := "posted"
+	missingAccount := testUUID(t)
+	combined, err := repository.Transactions(ctx, ownerID, transactionPageQuery{
+		AccountPublicID: &accountA, DateFrom: &dateFrom, DateToExclusive: &dateToExclusive,
+		Category: &groceries, Direction: &debit, Status: &posted, Sort: transactionSortNewest, Limit: 25,
+	})
+	if err != nil {
+		t.Fatalf("get combined filtered transactions: %v", err)
+	}
+	if got := transactionIDs(combined.Transactions); !equalStrings(got, []string{secondTieID, firstTieID}) {
+		t.Fatalf("expected combined owner filters to return tie rows newest-first, got %#v", got)
+	}
+
+	cases := []struct {
+		name  string
+		query transactionPageQuery
+		want  []string
+	}{
+		// 口座filterは他口座と他所有者を除外する。
+		{name: "account", query: transactionPageQuery{AccountPublicID: &accountA, Limit: 25}, want: []string{secondTieID, firstTieID, uncategorizedID, transportationID, oldestGroceriesID}},
+		// UTC期間は下端inclusive、上端exclusiveで同じoccurredAtを使う。
+		{name: "date", query: transactionPageQuery{DateFrom: &dateFrom, DateToExclusive: &dateToExclusive, Limit: 25}, want: []string{otherAccountGroceriesID, secondTieID, firstTieID, uncategorizedID, transportationID}},
+		// category master codeで絞り込む。
+		{name: "category", query: transactionPageQuery{Category: &groceries, Limit: 25}, want: []string{otherAccountGroceriesID, secondTieID, firstTieID, oldestGroceriesID}},
+		// 予約値uncategorizedはNULL categoryだけを返す。
+		{name: "uncategorized", query: transactionPageQuery{Category: stringPointer("uncategorized"), Limit: 25}, want: []string{uncategorizedID}},
+		// direction filterを単独でも適用できる。
+		{name: "direction", query: transactionPageQuery{Direction: stringPointer("credit"), Limit: 25}, want: []string{transportationID}},
+		// status filterを単独でも適用できる。
+		{name: "status", query: transactionPageQuery{Status: stringPointer("reversed"), Limit: 25}, want: []string{uncategorizedID}},
+		// canonicalでも不存在の口座はresource情報を出さず空ページにする。
+		{name: "missing account", query: transactionPageQuery{AccountPublicID: &missingAccount, Limit: 25}, want: []string{}},
+		// 他所有者の口座も不存在と区別せず空ページにする。
+		{name: "unowned account", query: transactionPageQuery{AccountPublicID: &otherAccountPublicID, Limit: 25}, want: []string{}},
+		// 形式が有効でもmasterにないcategoryは空ページにする。
+		{name: "unknown category", query: transactionPageQuery{Category: stringPointer("future-category"), Limit: 25}, want: []string{}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			page, err := repository.Transactions(ctx, ownerID, test.query)
+			if err != nil {
+				t.Fatalf("get filtered transactions: %v", err)
+			}
+			if got := transactionIDs(page.Transactions); !equalStrings(got, test.want) {
+				t.Fatalf("expected IDs %#v, got %#v", test.want, got)
+			}
+		})
+	}
+
+	// oldestでも同一日時の内部IDを昇順tie-breakerに使い、2ページを重複なく取得する。
+	firstPage, err := repository.Transactions(ctx, ownerID, transactionPageQuery{Category: &groceries, Sort: transactionSortOldest, Limit: 2})
+	if err != nil {
+		t.Fatalf("get oldest first page: %v", err)
+	}
+	if !firstPage.HasMore || !equalStrings(transactionIDs(firstPage.Transactions), []string{oldestGroceriesID, firstTieID}) {
+		t.Fatalf("unexpected oldest first page: %#v", firstPage)
+	}
+	cursorID := firstPage.Transactions[1].ID
+	secondPage, err := repository.Transactions(ctx, ownerID, transactionPageQuery{CursorPublicID: &cursorID, Category: &groceries, Sort: transactionSortOldest, Limit: 2})
+	if err != nil {
+		t.Fatalf("get oldest second page: %v", err)
+	}
+	if secondPage.HasMore || !equalStrings(transactionIDs(secondPage.Transactions), []string{secondTieID, otherAccountGroceriesID}) {
+		t.Fatalf("unexpected oldest second page: %#v", secondPage)
+	}
+
+	// cursor行が現在のfilterに一致しなければ、任意の位置からページを開始せず同じ400用errorにする。
+	if _, err := repository.Transactions(ctx, ownerID, transactionPageQuery{CursorPublicID: &transportationID, Category: &groceries, Limit: 25}); !errors.Is(err, ErrInvalidTransactionQuery) {
+		t.Fatalf("expected mismatched filter cursor to be invalid, got %v", err)
+	}
+}
+
+// TestPostgresRepositoryTransactionCategories は、category masterをdisplay_orderとcodeの安定順で返すことを確認する。
+// 必要な理由: frontendが選択肢をhard-codeせず、DBを正として毎回同じ順序で表示するため。
+func TestPostgresRepositoryTransactionCategories(t *testing.T) {
+	if os.Getenv("RUN_DB_TESTS") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run PostgreSQL integration tests")
+	}
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := platformpostgres.Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+
+	categories, err := NewPostgresRepository(db).TransactionCategories(ctx)
+	if err != nil {
+		t.Fatalf("get transaction categories: %v", err)
+	}
+	wantCodes := []string{"income", "groceries", "transportation", "utilities", "other"}
+	gotCodes := make([]string, 0, len(categories))
+	for _, category := range categories {
+		gotCodes = append(gotCodes, category.Code)
+	}
+	if !equalStrings(gotCodes, wantCodes) {
+		t.Fatalf("expected category order %#v, got %#v", wantCodes, gotCodes)
+	}
+}
+
+// TestPostgresRepositoryTransactionsUsesRecentIndex は、取引一覧queryが既存のuser recent indexをSortなしで使えることを確認する。
+// 必要な理由: cursor paginationでも全取引sortへ退行せず、既存indexと固定順序を一致させるため。
+func TestPostgresRepositoryTransactionsUsesRecentIndex(t *testing.T) {
+	if os.Getenv("RUN_DB_TESTS") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run PostgreSQL integration tests")
+	}
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := platformpostgres.Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	connection, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatalf("get query plan connection: %v", err)
+	}
+	defer connection.Close()
+	if _, err := connection.ExecContext(ctx, `SET enable_seqscan = off`); err != nil {
+		t.Fatalf("disable sequential scan: %v", err)
+	}
+	if _, err := connection.ExecContext(ctx, `SET enable_bitmapscan = off`); err != nil {
+		t.Fatalf("disable bitmap scan: %v", err)
+	}
+	rows, err := connection.QueryContext(ctx, `
+		EXPLAIN (COSTS OFF)
+		SELECT t.public_id, a.public_id, a.name
+		FROM finance_transactions t
+		JOIN finance_accounts a ON a.id = t.account_id AND a.user_id = t.user_id
+		WHERE t.user_id = 1
+		ORDER BY COALESCE(t.posted_at, t.authorized_at) DESC, t.id DESC
+		LIMIT 26
+	`)
+	if err != nil {
+		t.Fatalf("explain transactions query: %v", err)
+	}
+	defer rows.Close()
+	var lines []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatalf("scan query plan: %v", err)
+		}
+		lines = append(lines, line)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read query plan: %v", err)
+	}
+	plan := strings.Join(lines, "\n")
+	if !strings.Contains(plan, "finance_transactions_user_recent_idx") || strings.Contains(plan, "Sort") {
+		t.Fatalf("expected user recent index without Sort, got plan:\n%s", plan)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatalf("close newest plan rows: %v", err)
+	}
+
+	queries := []struct {
+		name       string
+		statement  string
+		indexNames []string
+	}{
+		// DESC indexのbackward scanでoldestも追加Sortなしにする。
+		{name: "oldest", indexNames: []string{"finance_transactions_user_recent_idx"}, statement: `
+			SELECT t.public_id
+			FROM finance_transactions t
+			WHERE t.user_id = 1
+			ORDER BY COALESCE(t.posted_at, t.authorized_at) ASC, t.id ASC
+			LIMIT 26`},
+		// expression日時のrangeもuser recent index上で評価する。
+		{name: "date range", indexNames: []string{"finance_transactions_user_recent_idx"}, statement: `
+			SELECT t.public_id
+			FROM finance_transactions t
+			WHERE t.user_id = 1
+			  AND COALESCE(t.posted_at, t.authorized_at) >= TIMESTAMPTZ '2026-08-01 00:00:00Z'
+			  AND COALESCE(t.posted_at, t.authorized_at) < TIMESTAMPTZ '2026-09-01 00:00:00Z'
+			ORDER BY COALESCE(t.posted_at, t.authorized_at) DESC, t.id DESC
+			LIMIT 26`},
+		// account_idとuser_idの選択度に応じたrecent indexで順序を維持する。
+		{name: "account", indexNames: []string{"finance_transactions_account_recent_idx", "finance_transactions_user_recent_idx"}, statement: `
+			SELECT t.public_id
+			FROM finance_transactions t
+			WHERE t.user_id = 1 AND t.account_id = 1
+			ORDER BY COALESCE(t.posted_at, t.authorized_at) DESC, t.id DESC
+			LIMIT 26`},
+	}
+	for _, test := range queries {
+		t.Run(test.name, func(t *testing.T) {
+			planRows, err := connection.QueryContext(ctx, "EXPLAIN (COSTS OFF) "+test.statement)
+			if err != nil {
+				t.Fatalf("explain query: %v", err)
+			}
+			defer planRows.Close()
+			var planLines []string
+			for planRows.Next() {
+				var line string
+				if err := planRows.Scan(&line); err != nil {
+					t.Fatalf("scan query plan: %v", err)
+				}
+				planLines = append(planLines, line)
+			}
+			if err := planRows.Err(); err != nil {
+				t.Fatalf("read query plan: %v", err)
+			}
+			plan := strings.Join(planLines, "\n")
+			usesExpectedIndex := false
+			for _, indexName := range test.indexNames {
+				usesExpectedIndex = usesExpectedIndex || strings.Contains(plan, indexName)
+			}
+			if !usesExpectedIndex || strings.Contains(plan, "Sort") {
+				t.Fatalf("expected one of %v without Sort, got plan:\n%s", test.indexNames, plan)
+			}
+		})
+	}
+}
+
 type testAccountRecord struct {
 	PublicID  string
 	UserID    int64
@@ -421,6 +815,53 @@ type transactionRecord struct {
 	PostedAt     *time.Time
 }
 
+type filterTransactionRecord struct {
+	UserID       int64
+	AccountID    int64
+	Name         string
+	Category     *string
+	Direction    string
+	Status       string
+	AuthorizedAt time.Time
+}
+
+func insertFilterTransactionRecord(t *testing.T, ctx context.Context, tx *sql.Tx, transaction filterTransactionRecord) string {
+	t.Helper()
+	publicID := testUUID(t)
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO finance_transactions (
+			public_id, user_id, account_id, name, merchant, amount_minor,
+			currency, direction, status, category_code, authorized_at, posted_at
+		)
+		VALUES ($1, $2, $3, $4, 'Synthetic Filter Merchant', 4200,
+			'JPY', $5, $6, $7, $8, $8)
+	`, publicID, transaction.UserID, transaction.AccountID, transaction.Name, transaction.Direction, transaction.Status, transaction.Category, transaction.AuthorizedAt)
+	if err != nil {
+		t.Fatalf("insert filter transaction record: %v", err)
+	}
+	return publicID
+}
+
+func transactionIDs(transactions []Transaction) []string {
+	ids := make([]string, 0, len(transactions))
+	for _, transaction := range transactions {
+		ids = append(ids, transaction.ID)
+	}
+	return ids
+}
+
+func equalStrings(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func insertTestTransactionRecord(t *testing.T, ctx context.Context, tx *sql.Tx, transaction transactionRecord) string {
 	t.Helper()
 	publicID := testUUID(t)
@@ -434,6 +875,23 @@ func insertTestTransactionRecord(t *testing.T, ctx context.Context, tx *sql.Tx, 
 	`, publicID, transaction.UserID, transaction.AccountID, transaction.AuthorizedAt, transaction.PostedAt)
 	if err != nil {
 		t.Fatalf("insert transaction record: %v", err)
+	}
+	return publicID
+}
+
+func insertNullableTestTransactionRecord(t *testing.T, ctx context.Context, tx *sql.Tx, userID int64, accountID int64, authorizedAt time.Time) string {
+	t.Helper()
+	publicID := testUUID(t)
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO finance_transactions (
+			public_id, user_id, account_id, name, amount_minor,
+			currency, direction, status, authorized_at
+		)
+		VALUES ($1, $2, $3, 'Uncategorized transaction', 500,
+			'JPY', 'credit', 'pending', $4)
+	`, publicID, userID, accountID, authorizedAt)
+	if err != nil {
+		t.Fatalf("insert nullable transaction record: %v", err)
 	}
 	return publicID
 }

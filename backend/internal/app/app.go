@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 
 	"devlab-board/backend/internal/finance"
 	"github.com/alexedwards/scs/v2"
@@ -18,11 +19,12 @@ import (
 const sessionUserIDKey = "user_id"
 
 type App struct {
-	config          Config
-	users           UserStore
-	sessions        *scs.SessionManager
-	financeSummary  FinanceSummaryReader
-	financeAccounts FinanceAccountReader
+	config              Config
+	users               UserStore
+	sessions            *scs.SessionManager
+	financeSummary      FinanceSummaryReader
+	financeAccounts     FinanceAccountReader
+	financeTransactions FinanceTransactionReader
 }
 
 // FinanceSummaryReader is the use-case boundary consumed by the HTTP adapter.
@@ -34,6 +36,12 @@ type FinanceSummaryReader interface {
 type FinanceAccountReader interface {
 	Accounts(ctx context.Context, userID int64) ([]finance.Account, error)
 	Account(ctx context.Context, userID int64, publicAccountID string) (finance.AccountDetail, error)
+}
+
+// FinanceTransactionReader is the transaction-list use-case boundary consumed by the HTTP adapter.
+type FinanceTransactionReader interface {
+	Transactions(ctx context.Context, userID int64, request finance.TransactionListRequest) (finance.TransactionPage, error)
+	Categories(ctx context.Context) ([]finance.Category, error)
 }
 
 type healthResponse struct {
@@ -68,13 +76,15 @@ func New(
 	sessions *scs.SessionManager,
 	financeSummary FinanceSummaryReader,
 	financeAccounts FinanceAccountReader,
+	financeTransactions FinanceTransactionReader,
 ) *App {
 	return &App{
-		config:          config,
-		users:           users,
-		sessions:        sessions,
-		financeSummary:  financeSummary,
-		financeAccounts: financeAccounts,
+		config:              config,
+		users:               users,
+		sessions:            sessions,
+		financeSummary:      financeSummary,
+		financeAccounts:     financeAccounts,
+		financeTransactions: financeTransactions,
 	}
 }
 
@@ -87,6 +97,7 @@ func NewTestHandler() http.Handler {
 		sessionManager,
 		emptyFinanceSummaryReader{},
 		emptyFinanceAccountReader{},
+		emptyFinanceTransactionReader{},
 	).Routes()
 }
 
@@ -103,6 +114,8 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("GET /api/finance/summary", a.requireSession(http.HandlerFunc(a.handleFinanceSummary)))
 	mux.Handle("GET /api/finance/accounts", a.requireSession(http.HandlerFunc(a.handleFinanceAccounts)))
 	mux.Handle("GET /api/finance/accounts/{accountId}", a.requireSession(http.HandlerFunc(a.handleFinanceAccount)))
+	mux.Handle("GET /api/finance/transactions", a.requireSession(http.HandlerFunc(a.handleFinanceTransactions)))
+	mux.Handle("GET /api/finance/categories", a.requireSession(http.HandlerFunc(a.handleFinanceCategories)))
 
 	return a.cors(a.sessions.LoadAndSave(mux))
 }
@@ -286,6 +299,85 @@ func (a *App) handleFinanceAccount(w http.ResponseWriter, r *http.Request) {
 	}{Account: detail.Account, RecentTransactions: detail.RecentTransactions})
 }
 
+func (a *App) handleFinanceTransactions(w http.ResponseWriter, r *http.Request) {
+	request, ok := parseFinanceTransactionListRequest(r.URL.RawQuery)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "finance_transactions_invalid_query", "取引一覧の指定が正しくありません")
+		return
+	}
+
+	userID := a.sessions.GetInt64(r.Context(), sessionUserIDKey)
+	page, err := a.financeTransactions.Transactions(r.Context(), userID, request)
+	if errors.Is(err, finance.ErrInvalidTransactionQuery) {
+		writeError(w, http.StatusBadRequest, "finance_transactions_invalid_query", "取引一覧の指定が正しくありません")
+		return
+	}
+	if err != nil {
+		log.Printf("finance transactions unavailable")
+		writeError(w, http.StatusInternalServerError, "finance_transactions_unavailable", "Finance取引一覧を取得できませんでした")
+		return
+	}
+	if page.Transactions == nil {
+		page.Transactions = make([]finance.Transaction, 0)
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func parseFinanceTransactionListRequest(rawQuery string) (finance.TransactionListRequest, bool) {
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return finance.TransactionListRequest{}, false
+	}
+	for key, entries := range values {
+		if !isFinanceTransactionQueryKey(key) || len(entries) != 1 || entries[0] == "" {
+			return finance.TransactionListRequest{}, false
+		}
+	}
+
+	return finance.TransactionListRequest{
+		AccountID: queryValue(values, "account_id"),
+		DateFrom:  queryValue(values, "date_from"),
+		DateTo:    queryValue(values, "date_to"),
+		Category:  queryValue(values, "category"),
+		Direction: queryValue(values, "direction"),
+		Status:    queryValue(values, "status"),
+		Sort:      queryValue(values, "sort"),
+		Cursor:    queryValue(values, "cursor"),
+		Limit:     queryValue(values, "limit"),
+	}, true
+}
+
+func isFinanceTransactionQueryKey(key string) bool {
+	switch key {
+	case "account_id", "date_from", "date_to", "category", "direction", "status", "sort", "cursor", "limit":
+		return true
+	default:
+		return false
+	}
+}
+
+func queryValue(values url.Values, key string) *string {
+	entries, ok := values[key]
+	if !ok {
+		return nil
+	}
+	value := entries[0]
+	return &value
+}
+
+func (a *App) handleFinanceCategories(w http.ResponseWriter, r *http.Request) {
+	categories, err := a.financeTransactions.Categories(r.Context())
+	if err != nil {
+		log.Printf("finance categories unavailable")
+		writeError(w, http.StatusInternalServerError, "finance_categories_unavailable", "Financeカテゴリーを取得できませんでした")
+		return
+	}
+	if categories == nil {
+		categories = make([]finance.Category, 0)
+	}
+	writeJSON(w, http.StatusOK, map[string][]finance.Category{"categories": categories})
+}
+
 type emptyFinanceSummaryReader struct{}
 
 func (emptyFinanceSummaryReader) Summary(_ context.Context, _ int64) (finance.Summary, error) {
@@ -303,6 +395,16 @@ func (emptyFinanceAccountReader) Accounts(_ context.Context, _ int64) ([]finance
 
 func (emptyFinanceAccountReader) Account(_ context.Context, _ int64, _ string) (finance.AccountDetail, error) {
 	return finance.AccountDetail{}, finance.ErrAccountNotFound
+}
+
+type emptyFinanceTransactionReader struct{}
+
+func (emptyFinanceTransactionReader) Transactions(_ context.Context, _ int64, _ finance.TransactionListRequest) (finance.TransactionPage, error) {
+	return finance.TransactionPage{Transactions: make([]finance.Transaction, 0)}, nil
+}
+
+func (emptyFinanceTransactionReader) Categories(_ context.Context) ([]finance.Category, error) {
+	return make([]finance.Category, 0), nil
 }
 
 func (a *App) startSession(r *http.Request, userID int64) error {

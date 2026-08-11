@@ -57,7 +57,8 @@ func NewServer(ctx context.Context, config Config) (*Server, error) {
 	financeRepository := finance.NewPostgresRepository(db)
 	financeSummary := finance.NewService(financeRepository)
 	financeAccounts := finance.NewAccountService(financeRepository)
-	handler := New(config, NewPostgresUserStore(db), sessionManager, financeSummary, financeAccounts).Routes()
+	financeTransactions := finance.NewTransactionService(financeRepository)
+	handler := New(config, NewPostgresUserStore(db), sessionManager, financeSummary, financeAccounts, financeTransactions).Routes()
 	return &Server{Handler: handler, DB: db, Redis: redisPool}, nil
 }
 

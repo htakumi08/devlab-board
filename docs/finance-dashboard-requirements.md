@@ -1186,10 +1186,30 @@ Infrastructure:
 
 ### Slice 3: 取引履歴
 
+#### Slice 3A: 取引履歴基本版
+
 - `GET /api/finance/transactions`。
-- filter、sort、cursor pagination。
-- URL query と server state。
-- DB index と query plan。
+- 自分の全取引を新しい順で表示。
+- 既定25件、最大100件のcursor pagination。
+- pagination cursorのURL query同期とTanStack Queryのserver state。
+- 既存DB indexと実query planの確認。
+
+#### Slice 3B: 取引履歴filter・sort
+
+- `account_id`、`date_from`、`date_to`、`category`、`direction`、`status` の単一選択filter。
+- 日付はtimezone設定を導入するまでUTC暦日として扱う。
+- `sort=newest|oldest`。未指定は新しい順。
+- filter、sort、paginationのURL query同期。
+- filter・sort変更時はcursorを削除し、pagination時は全条件を維持する。
+- DB category masterを選択肢の正とする。
+- keyword検索は検索対象とindexが未確定で優先度Couldのため、Slice 3Bの対象外とする。
+
+#### 読み取りMVP完了作業
+
+- 既存local userを対象に、決定的IDを使うsynthetic seed / cleanupを用意する。
+- synthetic dataは2口座以上、25件超、全direction・status・category、複数期間、nullable値を含める。
+- Overview、Accounts、Account Detail、Transactions、filter、sort、pagination、logoutを共通smoke testで確認する。
+- MVP受け入れ条件を自動test、browser確認、manual確認へ対応付ける。
 
 ### Slice 4: 支出集計
 
@@ -1438,3 +1458,5 @@ Repository 内の参照資料:
 | 2026-08-11 | Finance専用テーブルの `finance_` プレフィックス規則と共有テーブルの例外を追加 |
 | 2026-08-11 | Gitブランチ戦略に合わせ、AWS比較実験branchとTerraform stateの分離方針を更新 |
 | 2026-08-11 | Slice 2の口座詳細previewと金融機関groupingの実装境界を確定 |
+| 2026-08-11 | Slice 3を取引履歴基本版3Aとfilter・sort版3Bへ分割 |
+| 2026-08-11 | Slice 3Bのquery・UTC日付・cursor契約と、synthetic seed・MVP smokeの完了作業を確定 |

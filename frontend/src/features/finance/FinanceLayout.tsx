@@ -37,10 +37,9 @@ export function FinanceLayout() {
           <NavLink className={financeNavItemClassName} end to="/finance-lab">
             Home
           </NavLink>
-          <span aria-disabled="true" className="finance-nav-item finance-nav-disabled">
-            <span aria-disabled="true">Accounts</span>
-            <small>Coming soon</small>
-          </span>
+          <NavLink className={financeNavItemClassName} to="/finance-lab/accounts">
+            Accounts
+          </NavLink>
           <span aria-disabled="true" className="finance-nav-item finance-nav-disabled">
             <span aria-disabled="true">Transactions</span>
             <small>Coming soon</small>

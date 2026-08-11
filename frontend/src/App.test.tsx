@@ -134,7 +134,10 @@ describe("Finance Dashboard navigation", () => {
 
     expect(await screen.findByRole("heading", { name: "Finance Overview" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
-    expect(screen.getByText("Transactions")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("link", { name: "Transactions" })).toHaveAttribute(
+      "href",
+      "/finance-lab/transactions",
+    );
   });
 
   // テスト内容: keyboard操作でAccounts一覧へ移動し、maskと精度を保った残高を表示できることを確認する。
@@ -198,6 +201,31 @@ describe("Finance Dashboard navigation", () => {
     expect(
       mockedApiFetch.mock.calls.some(([path]) => path === "/api/finance/accounts"),
     ).toBe(false);
+  });
+
+  // テスト内容: TransactionsのURLを直接開き、Finance navigationのactiveな取引履歴画面を表示することを確認する。
+  // 必要な理由: 再読込・共有URLでもfallbackせず、取引履歴の現在routeを支援技術へ伝えるため。
+  test("opens the Transactions page directly and marks its navigation link active", async () => {
+    mockedApiFetch.mockImplementation(async (path) => {
+      if (path === "/api/auth/me") {
+        return jsonResponse({ user: authenticatedUser });
+      }
+      if (path === "/api/dashboard") {
+        return jsonResponse({ cards: [] });
+      }
+      if (path === "/api/finance/transactions?limit=25") {
+        return jsonResponse({ transactions: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+
+    renderApp("/finance-lab/transactions");
+
+    expect(await screen.findByRole("heading", { name: "Transactions" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Transactions" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   // テスト内容: Finance専用画面から既存sessionを終了できることを確認する。

@@ -14,6 +14,7 @@ import { FinanceAccountDetail } from "./features/finance/FinanceAccountDetail";
 import { FinanceAccounts } from "./features/finance/FinanceAccounts";
 import { FinanceLayout } from "./features/finance/FinanceLayout";
 import { FinanceOverview } from "./features/finance/FinanceOverview";
+import { FinanceTransactions } from "./features/finance/FinanceTransactions";
 import { financeQueryKeys } from "./features/finance/financeApi";
 import { UserAgentLab } from "./features/user-agent/UserAgentLab";
 import { apiFetch } from "./lib/api";
@@ -272,6 +273,15 @@ export function App() {
             path="accounts/:accountId"
             element={
               <FinanceAccountDetail
+                onLogout={handleLogout}
+                onSessionExpired={clearSessionState}
+              />
+            }
+          />
+          <Route
+            path="transactions"
+            element={
+              <FinanceTransactions
                 onLogout={handleLogout}
                 onSessionExpired={clearSessionState}
               />

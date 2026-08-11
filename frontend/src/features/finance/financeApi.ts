@@ -44,11 +44,41 @@ export type FinanceAccountDetail = {
   recentTransactions: FinanceTransaction[];
 };
 
+export type FinanceTransactionsPage = {
+  transactions: FinanceTransaction[];
+  nextCursor: string | null;
+};
+
+export type FinanceCategory = {
+  code: string;
+  label: string;
+};
+
+export type FinanceTransactionQuery = {
+  accountId: string | null;
+  dateFrom: string | null;
+  dateTo: string | null;
+  category: string | null;
+  direction: string | null;
+  status: string | null;
+  sort: string;
+  cursor: string | null;
+};
+
+export const FINANCE_TRANSACTIONS_PAGE_SIZE = 25;
+
 export const financeQueryKeys = {
   all: ["finance"] as const,
   summary: () => ["finance", "summary"] as const,
   accounts: () => ["finance", "accounts", "list"] as const,
   account: (accountId: string) => ["finance", "accounts", "detail", accountId] as const,
+  categories: () => ["finance", "categories", "list"] as const,
+  transactions: (query: FinanceTransactionQuery) => [
+    "finance",
+    "transactions",
+    "list",
+    query,
+  ] as const,
 };
 
 type FinanceErrorPayload = {
@@ -101,12 +131,51 @@ export async function getFinanceAccounts(signal?: AbortSignal): Promise<FinanceA
   return payload.accounts;
 }
 
+export async function getFinanceCategories(signal?: AbortSignal): Promise<FinanceCategory[]> {
+  const payload = await getFinanceResponse<{ categories: FinanceCategory[] }>(
+    "/api/finance/categories",
+    signal,
+  );
+  return payload.categories;
+}
+
 export async function getFinanceAccount(
   publicAccountId: string,
   signal?: AbortSignal,
 ): Promise<FinanceAccountDetail> {
   return getFinanceResponse<FinanceAccountDetail>(
     `/api/finance/accounts/${encodeURIComponent(publicAccountId)}`,
+    signal,
+  );
+}
+
+export async function getFinanceTransactions(
+  transactionQuery: FinanceTransactionQuery,
+  signal?: AbortSignal,
+): Promise<FinanceTransactionsPage> {
+  const query = new URLSearchParams();
+  const filters = [
+    ["account_id", transactionQuery.accountId],
+    ["date_from", transactionQuery.dateFrom],
+    ["date_to", transactionQuery.dateTo],
+    ["category", transactionQuery.category],
+    ["direction", transactionQuery.direction],
+    ["status", transactionQuery.status],
+  ] as const;
+  for (const [name, value] of filters) {
+    if (value !== null) {
+      query.set(name, value);
+    }
+  }
+  if (transactionQuery.sort !== "newest") {
+    query.set("sort", transactionQuery.sort);
+  }
+  if (transactionQuery.cursor !== null) {
+    query.set("cursor", transactionQuery.cursor);
+  }
+  query.set("limit", String(FINANCE_TRANSACTIONS_PAGE_SIZE));
+  return getFinanceResponse<FinanceTransactionsPage>(
+    `/api/finance/transactions?${query.toString()}`,
     signal,
   );
 }

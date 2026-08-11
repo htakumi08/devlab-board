@@ -19,6 +19,30 @@
         "y": 354
       },
       {
+        "name": "schema_migrations",
+        "schemaName": "public",
+        "x": 1010,
+        "y": 354
+      },
+      {
+        "name": "finance_accounts",
+        "schemaName": "public",
+        "x": 12,
+        "y": 700
+      },
+      {
+        "name": "finance_transactions",
+        "schemaName": "public",
+        "x": 520,
+        "y": 700
+      },
+      {
+        "name": "finance_transaction_categories",
+        "schemaName": "public",
+        "x": 1060,
+        "y": 700
+      },
+      {
         "name": "experiments",
         "schemaName": "public",
         "x": 12,
@@ -45,6 +69,68 @@
           "experiment_id"
         ],
         "secondTableName": "experiment_notes",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "finance_accounts",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "finance_transactions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id",
+          "user_id"
+        ],
+        "firstTableName": "finance_accounts",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "account_id",
+          "user_id"
+        ],
+        "secondTableName": "finance_transactions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "code"
+        ],
+        "firstTableName": "finance_transaction_categories",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "category_code"
+        ],
+        "secondTableName": "finance_transactions",
         "secondSchemaName": "public",
         "secondRelation": "*",
         "checkPoints": []

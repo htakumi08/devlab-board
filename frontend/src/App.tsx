@@ -1,6 +1,16 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 
+import { FinanceLayout } from "./features/finance/FinanceLayout";
+import { FinanceOverview } from "./features/finance/FinanceOverview";
 import { UserAgentLab } from "./features/user-agent/UserAgentLab";
 import { apiFetch } from "./lib/api";
 
@@ -103,6 +113,12 @@ export function App() {
   async function handleLogout() {
     setMessage("");
     await apiFetch("/api/auth/logout", { method: "POST" });
+    clearSessionState();
+  }
+
+  function clearSessionState() {
+    setMode("login");
+    setMessage("");
     setUser(null);
     setCards([]);
     setPassword("");
@@ -196,9 +212,53 @@ export function App() {
   }
 
   return (
-    <main className={`app-shell${isSidebarOpen ? "" : " sidebar-closed"}`}>
+    <>
       <ScrollToHash />
+      <Routes>
+        <Route
+          element={
+            <DevLabLayout
+              isSidebarOpen={isSidebarOpen}
+              onSidebarToggle={() => setIsSidebarOpen((current) => !current)}
+            />
+          }
+        >
+          <Route
+            path="/"
+            element={<OverviewPage cards={cards} onLogout={handleLogout} user={user} />}
+          />
+          <Route
+            path="/user-agent-lab"
+            element={<UserAgentLabPage onLogout={handleLogout} />}
+          />
+        </Route>
+        <Route element={<FinanceLayout />} path="/finance-lab">
+          <Route
+            index
+            element={
+              <FinanceOverview
+                onLogout={handleLogout}
+                onSessionExpired={clearSessionState}
+                user={{ email: user.email, name: user.name }}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate replace to="/finance-lab" />} />
+        </Route>
+        <Route path="*" element={<Navigate replace to="/" />} />
+      </Routes>
+    </>
+  );
+}
 
+type DevLabLayoutProps = {
+  isSidebarOpen: boolean;
+  onSidebarToggle: () => void;
+};
+
+function DevLabLayout({ isSidebarOpen, onSidebarToggle }: DevLabLayoutProps) {
+  return (
+    <main className={`app-shell${isSidebarOpen ? "" : " sidebar-closed"}`}>
       <button
         aria-controls="primary-sidebar"
         aria-expanded={isSidebarOpen}
@@ -206,20 +266,9 @@ export function App() {
         className="sidebar-toggle"
         title={isSidebarOpen ? "サイドバーを閉じる" : "サイドバーを開く"}
         type="button"
-        onClick={() => setIsSidebarOpen((current) => !current)}
+        onClick={onSidebarToggle}
       >
-        <svg aria-hidden="true" fill="none" focusable="false" viewBox="0 0 24 24">
-          <rect
-            height="16"
-            rx="3"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            width="17"
-            x="3.5"
-            y="4"
-          />
-          <path d="M9 4.5v15" stroke="currentColor" strokeWidth="1.8" />
-        </svg>
+        <SidebarIcon />
       </button>
 
       <aside
@@ -243,23 +292,33 @@ export function App() {
           <NavLink className={navItemClassName} to="/user-agent-lab">
             User-Agent Lab
           </NavLink>
+          <NavLink className={navItemClassName} to="/finance-lab">
+            Finance Dashboard
+          </NavLink>
         </nav>
       </aside>
 
       <section className="workspace">
-        <Routes>
-          <Route
-            path="/"
-            element={<OverviewPage cards={cards} onLogout={handleLogout} user={user} />}
-          />
-          <Route
-            path="/user-agent-lab"
-            element={<UserAgentLabPage onLogout={handleLogout} />}
-          />
-          <Route path="*" element={<Navigate replace to="/" />} />
-        </Routes>
+        <Outlet />
       </section>
     </main>
+  );
+}
+
+function SidebarIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" focusable="false" viewBox="0 0 24 24">
+      <rect
+        height="16"
+        rx="3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        width="17"
+        x="3.5"
+        y="4"
+      />
+      <path d="M9 4.5v15" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
   );
 }
 

@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 
+	"devlab-board/backend/internal/finance"
 	"github.com/alexedwards/scs/v2"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -16,9 +18,15 @@ import (
 const sessionUserIDKey = "user_id"
 
 type App struct {
-	config   Config
-	users    UserStore
-	sessions *scs.SessionManager
+	config         Config
+	users          UserStore
+	sessions       *scs.SessionManager
+	financeSummary FinanceSummaryReader
+}
+
+// FinanceSummaryReader is the use-case boundary consumed by the HTTP adapter.
+type FinanceSummaryReader interface {
+	Summary(ctx context.Context, userID int64) (finance.Summary, error)
 }
 
 type healthResponse struct {
@@ -47,18 +55,19 @@ type userAgentResponse struct {
 	UserAgent string `json:"userAgent"`
 }
 
-func New(config Config, users UserStore, sessions *scs.SessionManager) *App {
+func New(config Config, users UserStore, sessions *scs.SessionManager, financeSummary FinanceSummaryReader) *App {
 	return &App{
-		config:   config,
-		users:    users,
-		sessions: sessions,
+		config:         config,
+		users:          users,
+		sessions:       sessions,
+		financeSummary: financeSummary,
 	}
 }
 
 func NewTestHandler() http.Handler {
 	sessionManager := scs.New()
 	sessionManager.Cookie.Name = "devlab_session"
-	return New(Config{AppEnv: "test"}, NewMemoryUserStore(), sessionManager).Routes()
+	return New(Config{AppEnv: "test"}, NewMemoryUserStore(), sessionManager, emptyFinanceSummaryReader{}).Routes()
 }
 
 func (a *App) Routes() http.Handler {
@@ -71,6 +80,7 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("GET /api/auth/me", a.requireSession(http.HandlerFunc(a.handleMe)))
 	mux.Handle("GET /api/dashboard", a.requireSession(http.HandlerFunc(a.handleDashboard)))
 	mux.Handle("GET /api/user-agent", a.requireSession(http.HandlerFunc(a.handleUserAgent)))
+	mux.Handle("GET /api/finance/summary", a.requireSession(http.HandlerFunc(a.handleFinanceSummary)))
 
 	return a.cors(a.sessions.LoadAndSave(mux))
 }
@@ -206,6 +216,26 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleUserAgent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, userAgentResponse{UserAgent: r.UserAgent()})
+}
+
+func (a *App) handleFinanceSummary(w http.ResponseWriter, r *http.Request) {
+	userID := a.sessions.GetInt64(r.Context(), sessionUserIDKey)
+	summary, err := a.financeSummary.Summary(r.Context(), userID)
+	if err != nil {
+		log.Printf("finance summary unavailable")
+		writeError(w, http.StatusInternalServerError, "finance_summary_unavailable", "Finance概要を取得できませんでした")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]finance.Summary{"summary": summary})
+}
+
+type emptyFinanceSummaryReader struct{}
+
+func (emptyFinanceSummaryReader) Summary(_ context.Context, _ int64) (finance.Summary, error) {
+	return finance.Summary{
+		Balances:           make([]finance.Balance, 0),
+		RecentTransactions: make([]finance.Transaction, 0),
+	}, nil
 }
 
 func (a *App) startSession(r *http.Request, userID int64) error {

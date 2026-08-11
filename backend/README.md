@@ -62,6 +62,17 @@ docker compose exec backend \
 
 `-plaintext`は、ローカル学習環境でTLSを使わず接続する指定である。本番環境では使用しない。
 
+Goで実装した学習用クライアントからも、同じRPCを確認できる。`backend/`で次を実行する。
+
+```bash
+go run ./cmd/grpc-client \
+  -target 127.0.0.1:30104 \
+  -name Taro \
+  -timeout 3s
+```
+
+このクライアントはローカルのplaintext接続専用であり、本番向けのTLS設定は含まない。
+
 ## エンドポイント
 
 - `GET /`: バックエンドの起動確認

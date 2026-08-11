@@ -21,6 +21,12 @@ backend/
       doc.go
       user_store.go
       validation.go
+    finance/
+      summary.go
+      postgres_repository.go
+    platform/postgres/
+      migrate.go
+      migrations/
 ```
 
 ## 起動
@@ -83,8 +89,20 @@ go run ./cmd/grpc-client \
 - `GET /api/auth/me`: ログイン中ユーザを返す
 - `GET /api/dashboard`: session 認証済み API の疎通確認
 - `GET /api/user-agent`: request の User-Agent を返す
+- `GET /api/finance/summary`: 現在ユーザーの通貨別残高と最近の取引を返す
 
 `/api/auth/register` と `/api/auth/login` 以外の `/api/` endpoint は session 認証を必要とする。
+
+## Database migration
+
+- 番号付きSQLは `internal/platform/postgres/migrations/` に置く
+- `schema_migrations` にversion、file name、checksum、適用日時を保存する
+- 適用済みSQLは変更せず、新しい番号のmigrationを追加する
+- localでは互換性のためAPI起動時に適用する
+- AWS環境ではapplication起動とmigration jobを分離する
+- Finance専用テーブルは `finance_` プレフィックスへ統一する
+
+DB定義は [`../docs/db-design.dbml`](../docs/db-design.dbml)、Finance SummaryのAPI契約は [`../docs/api/finance-summary.md`](../docs/api/finance-summary.md) を参照する。
 
 ## 認証 / セッション
 

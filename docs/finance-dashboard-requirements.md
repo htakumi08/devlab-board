@@ -1181,6 +1181,8 @@ Infrastructure:
 - account card、mask、status。
 - account detail と口座別取引。
 - 他ユーザー account の拒否 test。
+- Account Detailの取引previewは最大5件とし、全履歴・filter・cursor paginationはSlice 3へ分離する。
+- 金融機関別groupingは、`finance_connections` とprovider接続情報を導入するSlice 5へ分離する。
 
 ### Slice 3: 取引履歴
 
@@ -1435,3 +1437,4 @@ Repository 内の参照資料:
 | 2026-08-11 | 参考動画、公式実装、現行アプリ、AWS 構成を調査し、初版草案を作成 |
 | 2026-08-11 | Finance専用テーブルの `finance_` プレフィックス規則と共有テーブルの例外を追加 |
 | 2026-08-11 | Gitブランチ戦略に合わせ、AWS比較実験branchとTerraform stateの分離方針を更新 |
+| 2026-08-11 | Slice 2の口座詳細previewと金融機関groupingの実装境界を確定 |

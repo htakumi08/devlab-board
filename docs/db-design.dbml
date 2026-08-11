@@ -137,7 +137,7 @@ Table finance_transactions {
 
   indexes {
     (user_id, `COALESCE(posted_at, authorized_at)`, id) [name: 'finance_transactions_user_recent_idx', note: 'Summaryの確定日時優先による新しい順。timestamp式とidはDESC']
-    (account_id, authorized_at, id) [name: 'finance_transactions_account_recent_idx']
+    (account_id, `COALESCE(posted_at, authorized_at)`, id) [name: 'finance_transactions_account_recent_idx', note: '口座詳細の確定日時優先による新しい順。timestamp式とidはDESC']
   }
 
   Note: '''

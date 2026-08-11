@@ -44,3 +44,7 @@
 Codex で作業するときは、まず `AGENTS.md` と `codex-workflow/README.md` を確認する。
 
 `codex-workflow/` には、Go backend、React frontend、Terraform/AWS、docs 整備、サブエージェント分担のための rule、playbook、role、skill を置く。
+
+## Git運用
+
+`main`を本番、`develop`を統合先とするブランチ運用、機能ブランチの命名、release、hotfix、AWS構成比較の扱いは、[`docs/git-branch-strategy.md`](docs/git-branch-strategy.md)を参照する。

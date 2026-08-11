@@ -22,6 +22,8 @@ backend/
       user_store.go
       validation.go
     finance/
+      account.go
+      account_repository.go
       summary.go
       postgres_repository.go
     platform/postgres/
@@ -90,6 +92,8 @@ go run ./cmd/grpc-client \
 - `GET /api/dashboard`: session 認証済み API の疎通確認
 - `GET /api/user-agent`: request の User-Agent を返す
 - `GET /api/finance/summary`: 現在ユーザーの通貨別残高と最近の取引を返す
+- `GET /api/finance/accounts`: 現在ユーザーの口座一覧を返す
+- `GET /api/finance/accounts/{accountId}`: 現在ユーザーの口座詳細と最近の取引5件を返す
 
 `/api/auth/register` と `/api/auth/login` 以外の `/api/` endpoint は session 認証を必要とする。
 

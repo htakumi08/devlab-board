@@ -158,7 +158,13 @@ func TestFinanceSummaryEndpointFailure(t *testing.T) {
 func newFinanceTestHandler(reader FinanceSummaryReader) http.Handler {
 	sessionManager := scs.New()
 	sessionManager.Cookie.Name = "devlab_session"
-	return New(Config{AppEnv: "test"}, NewMemoryUserStore(), sessionManager, reader).Routes()
+	return New(
+		Config{AppEnv: "test"},
+		NewMemoryUserStore(),
+		sessionManager,
+		reader,
+		emptyFinanceAccountReader{},
+	).Routes()
 }
 
 func minorAmountPointer(value finance.MinorAmount) *finance.MinorAmount {

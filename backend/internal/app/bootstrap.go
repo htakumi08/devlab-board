@@ -14,6 +14,9 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/gomodule/redigo/redis"
 	_ "github.com/lib/pq"
+
+	"devlab-board/backend/internal/finance"
+	platformpostgres "devlab-board/backend/internal/platform/postgres"
 )
 
 // このファイルは、DB、migration、session store、UserStore、HTTP handler を初期化して Server に組み立てる。
@@ -40,7 +43,7 @@ func NewServer(ctx context.Context, config Config) (*Server, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	if err := migrate(ctx, db); err != nil {
+	if err := platformpostgres.Migrate(ctx, db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate database: %w", err)
 	}
@@ -51,7 +54,8 @@ func NewServer(ctx context.Context, config Config) (*Server, error) {
 		return nil, err
 	}
 
-	handler := New(config, NewPostgresUserStore(db), sessionManager).Routes()
+	financeSummary := finance.NewService(finance.NewPostgresRepository(db))
+	handler := New(config, NewPostgresUserStore(db), sessionManager, financeSummary).Routes()
 	return &Server{Handler: handler, DB: db, Redis: redisPool}, nil
 }
 
@@ -105,28 +109,4 @@ func newSessionManager(config Config, db *sql.DB) (*scs.SessionManager, *redis.P
 	default:
 		return nil, nil, fmt.Errorf("unsupported SESSION_STORE %q", config.SessionStore)
 	}
-}
-
-func migrate(ctx context.Context, db *sql.DB) error {
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS users (
-			id BIGSERIAL PRIMARY KEY,
-			public_id UUID NOT NULL UNIQUE,
-			email TEXT NOT NULL UNIQUE,
-			password_hash TEXT NOT NULL,
-			name TEXT NOT NULL,
-			role TEXT NOT NULL DEFAULT 'user',
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		);
-
-		CREATE TABLE IF NOT EXISTS sessions (
-			token TEXT PRIMARY KEY,
-			data BYTEA NOT NULL,
-			expiry TIMESTAMPTZ NOT NULL
-		);
-
-		CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions (expiry);
-	`)
-	return err
 }

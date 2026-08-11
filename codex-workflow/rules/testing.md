@@ -26,6 +26,7 @@
 - Go backend は `go test ./...` を基本にする。
 - HTTP handler は `httptest` で status、headers、JSON body を確認する。
 - DB 導入後は repository / migration / transaction の検証方針を決める。
+- PostgreSQL integration testは通常testから分離し、Docker Compose上で `RUN_DB_TESTS=1 go test` として明示実行する。
 - external service 連携は interface や small wrapper で差し替え可能にする。
 
 ## フロントエンド

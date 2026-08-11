@@ -689,7 +689,7 @@ sort
 ### 10.2 Response 方針
 
 - API response type は frontend の画面ごとに重複定義せず、Finance API boundary へ集約する。
-- 金額は `amountMinor` と `currency` を返す。
+- 金額はminor unit整数を表す10進文字列の `amountMinor` と `currency` を返し、JSON numberへ変換しない。
 - 日時は ISO 8601 とし、timezone の意味を定義する。
 - 残高・集計には `asOf` または `lastSyncedAt` を含める。
 - 一覧は cursor pagination を優先し、`nextCursor` を返す。

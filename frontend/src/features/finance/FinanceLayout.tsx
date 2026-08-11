@@ -40,10 +40,9 @@ export function FinanceLayout() {
           <NavLink className={financeNavItemClassName} to="/finance-lab/accounts">
             Accounts
           </NavLink>
-          <span aria-disabled="true" className="finance-nav-item finance-nav-disabled">
-            <span aria-disabled="true">Transactions</span>
-            <small>Coming soon</small>
-          </span>
+          <NavLink className={financeNavItemClassName} to="/finance-lab/transactions">
+            Transactions
+          </NavLink>
         </nav>
 
         <Link className="finance-back-link" to="/">

@@ -27,6 +27,30 @@ export type FinanceSummary = {
   asOf: string | null;
 };
 
+export type FinanceAccount = {
+  id: string;
+  name: string;
+  accountType: "checking" | "savings" | "credit" | "investment" | "other";
+  mask: string;
+  currency: string;
+  currentAmountMinor: string;
+  availableAmountMinor: string | null;
+  status: "active" | "closed";
+  balanceAsOf: string;
+};
+
+export type FinanceAccountDetail = {
+  account: FinanceAccount;
+  recentTransactions: FinanceTransaction[];
+};
+
+export const financeQueryKeys = {
+  all: ["finance"] as const,
+  summary: () => ["finance", "summary"] as const,
+  accounts: () => ["finance", "accounts", "list"] as const,
+  account: (accountId: string) => ["finance", "accounts", "detail", accountId] as const,
+};
+
 type FinanceErrorPayload = {
   error?: {
     code?: string;
@@ -46,9 +70,8 @@ export class FinanceApiError extends Error {
   }
 }
 
-// Finance server stateの取得先とresponse shapeを画面から分離する。
-export async function getFinanceSummary(): Promise<FinanceSummary> {
-  const response = await apiFetch("/api/finance/summary");
+async function getFinanceResponse<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await apiFetch(path, { signal });
   if (!response.ok) {
     let payload: FinanceErrorPayload = {};
     try {
@@ -58,6 +81,32 @@ export async function getFinanceSummary(): Promise<FinanceSummary> {
     }
     throw new FinanceApiError(response.status, payload.error?.code, payload.error?.message);
   }
-  const payload = (await response.json()) as { summary: FinanceSummary };
+  return (await response.json()) as T;
+}
+
+// Finance server stateの取得先とresponse shapeを画面から分離する。
+export async function getFinanceSummary(signal?: AbortSignal): Promise<FinanceSummary> {
+  const payload = await getFinanceResponse<{ summary: FinanceSummary }>(
+    "/api/finance/summary",
+    signal,
+  );
   return payload.summary;
+}
+
+export async function getFinanceAccounts(signal?: AbortSignal): Promise<FinanceAccount[]> {
+  const payload = await getFinanceResponse<{ accounts: FinanceAccount[] }>(
+    "/api/finance/accounts",
+    signal,
+  );
+  return payload.accounts;
+}
+
+export async function getFinanceAccount(
+  publicAccountId: string,
+  signal?: AbortSignal,
+): Promise<FinanceAccountDetail> {
+  return getFinanceResponse<FinanceAccountDetail>(
+    `/api/finance/accounts/${encodeURIComponent(publicAccountId)}`,
+    signal,
+  );
 }

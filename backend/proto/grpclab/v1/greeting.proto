@@ -1,0 +1,23 @@
+// protoのバージョンの宣言
+syntax = "proto3";
+
+// 生成されるGoパッケージのimport path
+option go_package = "devlab-board/backend/gen/grpclab/v1";
+
+
+package grpclab.v1;
+
+// サービスの定義
+service GreetingService {
+  // サービスが持つメソッドの定義
+  rpc Hello(HelloRequest) returns (HelloResponse);
+}
+
+// 型の定義
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloResponse {
+  string message = 1;
+}

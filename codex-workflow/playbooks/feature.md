@@ -23,4 +23,5 @@ description: Go API と React UI を縦に通す境界の明確な機能を実�
 - 状態遷移、認可、DB transaction、非同期競合、`null` / `undefined` の扱いなど、読み違えやすい箇所に補足があるか。
 - accessibility や運用上の理由で意味のある UI 制約がある場合、その意図が分かるか。
 - Terraform の module、variable、output に `description` があり、IAM や network の意図が読み取れるか。
+- 各テストケースに、「何をテストするか」と「なぜそのケースが必要か」が短いコメントで残り、現在の assertion と一致しているか。
 - 自明な代入、単純な JSX の見た目説明、1 行ごとの言い換えコメントが残っていないか。

@@ -8,7 +8,7 @@
 2. `README.md` で workflow の入口と読み順を確認する。
 3. タスクに関係する `rules/` と `playbooks/` だけを読む。
 4. サブエージェントを使う場合だけ `roles/` を読む。
-5. 反復作業として安定している場合だけ `skills/` を読む。
+5. repository から明示起動・自動発見する skill は `../.agents/skills/`、workflow 内部の補助ガイドは `skills/` を読む。
 
 ## メンテナンス方針
 
@@ -16,7 +16,8 @@
 - 新しいファイルを増やす前に、既存の rule / playbook / role / skill の更新で足りるか確認する。
 - 技術スタックに合わない内容、関係のない generated assets、local dependency folders、個人環境のログは置かない。
 - 実コード、README、docs と矛盾が出た場合は、実コードとユーザーの最新要望を優先して workflow を更新する。
-- 安定した運用習慣だけを `skills/` に昇格する。単発作業のメモは `docs/implementation/` を使う。
+- repository から直接呼び出す安定した運用習慣は `../.agents/skills/` に置く。
+- workflow 内部だけで使う短い技術ガイドは `skills/` に置く。単発作業のメモは `docs/implementation/` を使う。
 
 ## サブエージェント運用
 
@@ -29,5 +30,6 @@
 
 - `README.md` の構成図や読み順が実際のファイル構成と一致している。
 - 新しい rule / playbook / role / skill を追加した場合、入口から辿れる。
+- `.agents/skills/` のskillを追加・移動した場合、playbookとroleの参照先が新しいpathへ揃っている。
 - docs と workflow のどちらに置くべき内容かが分かれている。
 - workflow-only changes では、少なくとも file tree、相対 path、`git status --short` を確認する。

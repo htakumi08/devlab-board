@@ -17,11 +17,18 @@ frontend/
   src/
     App.tsx
     features/
+      finance/
+        FinanceLayout.tsx
+        FinanceOverview.tsx
+        FinanceAccounts.tsx
+        FinanceAccountDetail.tsx
+        financeApi.ts
       user-agent/
         UserAgentLab.tsx
         api.ts
     lib/
       api.ts
+      queryClient.ts
     main.tsx
     style.css
 ```
@@ -34,11 +41,14 @@ frontend/
 - dev: `yarn dev`
 - build: `yarn build`
 - preview: `yarn preview`
+- test: `yarn test`
+- coverage: `yarn test:coverage`
 
 ## この段階での方針
 
 - `/` には Overview と Session を表示する
 - 実験機能は `/user-agent-lab` のように機能ごとの URL と画面を持たせる
+- `/finance-lab`、`/finance-lab/accounts`、`/finance-lab/accounts/:accountId` はFinance専用layoutを使う
 - サイドバーは各画面で共通表示し、メイン領域を React Router で切り替える
 - サイドバーの開閉状態は `useState` で管理し、ページ再読み込み時は開いた状態に戻す
 - component、hook、API client は必要になった時点で追加する
@@ -57,4 +67,6 @@ frontend/
 
 - まず `useState` を使い、共有が必要になった時点で Atom を検討する
 - API データは TanStack Query を正とし、Atom や `useState` へ重複保存しない
-- Jotai と TanStack Query は、利用する機能を実装するときに導入する
+- Financeのserver stateはTanStack Queryを使い、query keyをFinance API boundaryへ集約する
+- logoutまたはFinance APIの401では、進行中のFinance queryを中断し、Finance prefixのcacheを破棄する
+- Jotai は共有client stateが必要になるまで導入しない

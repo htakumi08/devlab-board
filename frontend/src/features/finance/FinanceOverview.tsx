@@ -1,6 +1,13 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { FinanceApiError, FinanceSummary, getFinanceSummary } from "./financeApi";
+import {
+  FinanceApiError,
+  FinanceSummary,
+  financeQueryKeys,
+  getFinanceSummary,
+} from "./financeApi";
+import { formatFinanceDateTime, formatFinanceMoney } from "./financeFormat";
+import { useFinanceUnauthorized } from "./useFinanceUnauthorized";
 
 type FinanceOverviewProps = {
   onLogout: () => Promise<void>;
@@ -11,51 +18,16 @@ type FinanceOverviewProps = {
   };
 };
 
-type FinanceOverviewStatus = "loading" | "success" | "error" | "permission-denied";
-
 export function FinanceOverview({ onLogout, onSessionExpired, user }: FinanceOverviewProps) {
-  const [summary, setSummary] = useState<FinanceSummary | null>(null);
-  const [status, setStatus] = useState<FinanceOverviewStatus>("loading");
-
-  async function loadSummary(isActive: () => boolean) {
-    if (isActive()) {
-      setStatus("loading");
-    }
-
-    try {
-      const result = await getFinanceSummary();
-      if (isActive()) {
-        setSummary(result);
-        setStatus("success");
-      }
-    } catch (error) {
-      if (!isActive()) {
-        return;
-      }
-      if (error instanceof FinanceApiError && error.status === 401) {
-        onSessionExpired();
-        return;
-      }
-      setStatus(error instanceof FinanceApiError && error.status === 403
-        ? "permission-denied"
-        : "error");
-    }
-  }
-
-  useEffect(() => {
-    let active = true;
-
-    // 初回取得と再試行を同じ状態遷移へ通し、401/403の扱いが分岐しないようにする。
-    void loadSummary(() => active);
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function retrySummary() {
-    await loadSummary(() => true);
-  }
+  const summaryQuery = useQuery({
+    queryKey: financeQueryKeys.summary(),
+    queryFn: ({ signal }) => getFinanceSummary(signal),
+  });
+  useFinanceUnauthorized(summaryQuery.error, onSessionExpired);
+  const isForbidden = summaryQuery.error instanceof FinanceApiError
+    && summaryQuery.error.status === 403;
+  const isUnauthorized = summaryQuery.error instanceof FinanceApiError
+    && summaryQuery.error.status === 401;
 
   return (
     <>
@@ -70,26 +42,26 @@ export function FinanceOverview({ onLogout, onSessionExpired, user }: FinanceOve
         </button>
       </header>
 
-      {status === "loading" && (
+      {summaryQuery.isPending && (
         <section className="finance-state-panel" role="status" aria-live="polite">
           <span className="finance-loading-dot" aria-hidden="true" />
           <p>Finance概要を読み込んでいます</p>
         </section>
       )}
 
-      {status === "error" && (
+      {summaryQuery.isError && !isForbidden && !isUnauthorized && (
         <section className="finance-state-panel finance-error-panel" role="alert">
           <div>
             <h3>Finance概要を取得できませんでした</h3>
             <p>時間をおいて、もう一度お試しください。</p>
           </div>
-          <button type="button" onClick={() => void retrySummary()}>
+          <button type="button" onClick={() => void summaryQuery.refetch()}>
             再試行
           </button>
         </section>
       )}
 
-      {status === "permission-denied" && (
+      {summaryQuery.isError && isForbidden && (
         <section className="finance-state-panel finance-error-panel" role="alert">
           <div>
             <h3>Finance概要を表示する権限がありません</h3>
@@ -98,9 +70,9 @@ export function FinanceOverview({ onLogout, onSessionExpired, user }: FinanceOve
         </section>
       )}
 
-      {status === "success" && summary?.accountCount === 0 && <FinanceEmptyState />}
-      {status === "success" && summary && summary.accountCount > 0 && (
-        <FinanceSummaryView summary={summary} />
+      {summaryQuery.isSuccess && summaryQuery.data.accountCount === 0 && <FinanceEmptyState />}
+      {summaryQuery.isSuccess && summaryQuery.data.accountCount > 0 && (
+        <FinanceSummaryView summary={summaryQuery.data} />
       )}
     </>
   );
@@ -131,7 +103,7 @@ function FinanceSummaryView({ summary }: { summary: FinanceSummary }) {
           </div>
           <p>
             {summary.asOf
-              ? `残高基準日時（最古） ${formatDateTime(summary.asOf)}`
+              ? `残高基準日時（最古） ${formatFinanceDateTime(summary.asOf)}`
               : "残高基準日時なし"}
           </p>
         </div>
@@ -144,11 +116,11 @@ function FinanceSummaryView({ summary }: { summary: FinanceSummary }) {
           {summary.balances.map((balance) => (
             <article key={balance.currency}>
               <p>{balance.currency} Current balance</p>
-              <strong>{formatMoney(balance.currentAmountMinor, balance.currency)}</strong>
+              <strong>{formatFinanceMoney(balance.currentAmountMinor, balance.currency)}</strong>
               <span>
                 Available: {balance.availableAmountMinor === null
                   ? "取得不可"
-                  : formatMoney(balance.availableAmountMinor, balance.currency)}
+                  : formatFinanceMoney(balance.availableAmountMinor, balance.currency)}
               </span>
             </article>
           ))}
@@ -179,9 +151,11 @@ function FinanceSummaryView({ summary }: { summary: FinanceSummary }) {
                 <div className="finance-transaction-amount">
                   <strong>
                     {transaction.direction === "debit" ? "-" : "+"}
-                    {formatMoney(transaction.amountMinor, transaction.currency)}
+                    {formatFinanceMoney(transaction.amountMinor, transaction.currency)}
                   </strong>
-                  <time dateTime={transaction.occurredAt}>{formatDateTime(transaction.occurredAt)}</time>
+                  <time dateTime={transaction.occurredAt}>
+                    {formatFinanceDateTime(transaction.occurredAt)}
+                  </time>
                 </div>
               </li>
             ))}
@@ -190,40 +164,4 @@ function FinanceSummaryView({ summary }: { summary: FinanceSummary }) {
       </section>
     </>
   );
-}
-
-function formatMoney(amountMinor: string, currency: string) {
-  const formatter = new Intl.NumberFormat("ja-JP", { style: "currency", currency });
-  const fractionDigits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
-  const minorAmount = BigInt(amountMinor);
-  const isNegative = minorAmount < 0n;
-  const absoluteMinorAmount = isNegative ? -minorAmount : minorAmount;
-  const minorUnitScale = 10n ** BigInt(fractionDigits);
-  const majorAmount = absoluteMinorAmount / minorUnitScale;
-  const fractionAmount = absoluteMinorAmount % minorUnitScale;
-  const integerParts = formatter
-    .formatToParts(majorAmount)
-    .filter((part) => part.type === "integer" || part.type === "group");
-  const templateParts = formatter.formatToParts(isNegative ? -1n : 1n);
-
-  // Intlの通貨記号・符号・区切り位置を保ち、実額だけはBigIntのまま組み立てる。
-  return templateParts
-    .flatMap((part) => {
-      if (part.type === "integer") {
-        return integerParts;
-      }
-      if (part.type === "fraction") {
-        return [{ ...part, value: fractionAmount.toString().padStart(fractionDigits, "0") }];
-      }
-      return [part];
-    })
-    .map((part) => part.value)
-    .join("");
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("ja-JP", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }

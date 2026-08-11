@@ -1,10 +1,13 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { App } from "./App";
+import { financeQueryKeys } from "./features/finance/financeApi";
 import { apiFetch } from "./lib/api";
+import { createAppQueryClient } from "./lib/queryClient";
 
 vi.mock("./lib/api", () => ({
   apiFetch: vi.fn(),
@@ -18,6 +21,18 @@ const authenticatedUser = {
 };
 
 const mockedApiFetch = vi.mocked(apiFetch);
+
+const financeAccount = {
+  id: "370fdd2d-aeb9-492d-a981-c40923531411",
+  name: "Synthetic Checking",
+  accountType: "checking",
+  mask: "1234",
+  currency: "JPY",
+  currentAmountMinor: "9007199254740993",
+  availableAmountMinor: "165000",
+  status: "active",
+  balanceAsOf: "2026-08-11T01:05:00Z",
+};
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -49,12 +64,15 @@ function mockAuthenticatedSession() {
   });
 }
 
-function renderApp(initialPath: string) {
-  return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <App />
-    </MemoryRouter>,
+function renderApp(initialPath: string, queryClient = createAppQueryClient()) {
+  const result = render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <App />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
+  return { ...result, queryClient };
 }
 
 describe("Finance Dashboard navigation", () => {
@@ -115,8 +133,71 @@ describe("Finance Dashboard navigation", () => {
     renderApp("/finance-lab/not-implemented");
 
     expect(await screen.findByRole("heading", { name: "Finance Overview" })).toBeInTheDocument();
-    expect(screen.getByText("Accounts")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("link", { name: "Accounts" })).toBeInTheDocument();
     expect(screen.getByText("Transactions")).toHaveAttribute("aria-disabled", "true");
+  });
+
+  // テスト内容: keyboard操作でAccounts一覧へ移動し、maskと精度を保った残高を表示できることを確認する。
+  // 必要な理由: 主要routeをpointerなしで利用でき、完全番号や金額の丸めを画面へ持ち込まないため。
+  test("opens the Accounts list with the keyboard and renders a masked precise balance", async () => {
+    mockedApiFetch.mockImplementation(async (path) => {
+      if (path === "/api/auth/me") {
+        return jsonResponse({ user: authenticatedUser });
+      }
+      if (path === "/api/dashboard") {
+        return jsonResponse({ cards: [] });
+      }
+      if (path === "/api/finance/summary") {
+        return jsonResponse({
+          summary: { accountCount: 0, balances: [], recentTransactions: [], asOf: null },
+        });
+      }
+      if (path === "/api/finance/accounts") {
+        return jsonResponse({ accounts: [financeAccount] });
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    const user = userEvent.setup();
+    renderApp("/finance-lab");
+
+    const accountsLink = await screen.findByRole("link", { name: "Accounts" });
+    accountsLink.focus();
+    expect(accountsLink).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    expect(screen.getByText("•••• 1234")).toBeInTheDocument();
+    expect(screen.getByText("￥9,007,199,254,740,993")).toBeInTheDocument();
+    expect(accountsLink).toHaveAttribute("aria-current", "page");
+  });
+
+  // テスト内容: Account DetailのURLを直接開き、一覧取得を経由せず対象口座を表示することを確認する。
+  // 必要な理由: 再読込・共有URL・ブラウザ履歴でも現在画面を維持する要件を守るため。
+  test("opens an Account Detail directly by public account ID", async () => {
+    mockedApiFetch.mockImplementation(async (path) => {
+      if (path === "/api/auth/me") {
+        return jsonResponse({ user: authenticatedUser });
+      }
+      if (path === "/api/dashboard") {
+        return jsonResponse({ cards: [] });
+      }
+      if (path === `/api/finance/accounts/${financeAccount.id}`) {
+        return jsonResponse({ account: financeAccount, recentTransactions: [] });
+      }
+      if (path === "/api/finance/summary") {
+        return jsonResponse({
+          summary: { accountCount: 0, balances: [], recentTransactions: [], asOf: null },
+        });
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    renderApp(`/finance-lab/accounts/${financeAccount.id}`);
+
+    expect(await screen.findByRole("heading", { name: "Synthetic Checking" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Accounts" })).toHaveAttribute("aria-current", "page");
+    expect(
+      mockedApiFetch.mock.calls.some(([path]) => path === "/api/finance/accounts"),
+    ).toBe(false);
   });
 
   // テスト内容: Finance専用画面から既存sessionを終了できることを確認する。
@@ -153,6 +234,40 @@ describe("Finance Dashboard navigation", () => {
 
     expect(await screen.findByRole("heading", { name: "ログイン" })).toBeInTheDocument();
     expect(mockedApiFetch).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+  });
+
+  // テスト内容: logout API失敗時も進行中取得を中断し、Finance query cacheを破棄してログインへ戻ることを確認する。
+  // 必要な理由: network障害時に残高や口座情報がsession終了後のmemoryへ残ることを防ぐため。
+  test("clears Finance queries and aborts in-flight data when logout fails", async () => {
+    let financeSignal: AbortSignal | null = null;
+    mockedApiFetch.mockImplementation(async (path, init) => {
+      if (path === "/api/auth/me") {
+        return jsonResponse({ user: authenticatedUser });
+      }
+      if (path === "/api/dashboard") {
+        return jsonResponse({ cards: [] });
+      }
+      if (path === "/api/finance/summary") {
+        financeSignal = init?.signal ?? null;
+        return new Promise<Response>(() => undefined);
+      }
+      if (path === "/api/auth/logout") {
+        throw new TypeError("Failed to fetch");
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    const user = userEvent.setup();
+    const queryClient = createAppQueryClient();
+    queryClient.setQueryData(financeQueryKeys.accounts(), { accounts: [financeAccount] });
+    renderApp("/finance-lab", queryClient);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Finance概要を読み込んでいます");
+    await user.click(screen.getByRole("button", { name: "Logout" }));
+
+    expect(await screen.findByRole("heading", { name: "ログイン" })).toBeInTheDocument();
+    expect(financeSignal).not.toBeNull();
+    expect(financeSignal?.aborted).toBe(true);
+    expect(queryClient.getQueriesData({ queryKey: financeQueryKeys.all })).toEqual([]);
   });
 
   // テスト内容: 未認証のFinance直接アクセスで既存の認証画面を表示することを確認する。
@@ -276,6 +391,73 @@ describe("Finance Dashboard navigation", () => {
       throw new Error(`Unexpected API path: ${path}`);
     });
     renderApp("/finance-lab");
+
+    expect(await screen.findByRole("heading", { name: "ログイン" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Finance navigation")).not.toBeInTheDocument();
+  });
+
+  // テスト内容: Finance APIの401で既存のFinance query cacheを破棄してログインへ戻ることを確認する。
+  // 必要な理由: session失効後に前ユーザーの口座情報が再表示される回帰を防ぐため。
+  test("clears all Finance queries when the session expires", async () => {
+    mockedApiFetch.mockImplementation(async (path) => {
+      if (path === "/api/auth/me") {
+        return jsonResponse({ user: authenticatedUser });
+      }
+      if (path === "/api/dashboard") {
+        return jsonResponse({ cards: [] });
+      }
+      if (path === "/api/finance/summary") {
+        return jsonResponse({ error: { code: "unauthorized" } }, 401);
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    const queryClient = createAppQueryClient();
+    queryClient.setQueryData(financeQueryKeys.accounts(), { accounts: [financeAccount] });
+    renderApp("/finance-lab", queryClient);
+
+    expect(await screen.findByRole("heading", { name: "ログイン" })).toBeInTheDocument();
+    expect(queryClient.getQueriesData({ queryKey: financeQueryKeys.all })).toEqual([]);
+  });
+
+  // テスト内容: Accounts一覧の401でApp認証状態を破棄してログイン画面へ戻ることを確認する。
+  // 必要な理由: Summary以外のFinance routeでも同じsession境界を維持するため。
+  test("returns to login when the Accounts list request is unauthorized", async () => {
+    mockedApiFetch.mockImplementation(async (path) => {
+      if (path === "/api/auth/me") {
+        return jsonResponse({ user: authenticatedUser });
+      }
+      if (path === "/api/dashboard") {
+        return jsonResponse({ cards: [] });
+      }
+      if (path === "/api/finance/accounts") {
+        return jsonResponse({ error: { code: "unauthorized" } }, 401);
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+
+    renderApp("/finance-lab/accounts");
+
+    expect(await screen.findByRole("heading", { name: "ログイン" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Finance navigation")).not.toBeInTheDocument();
+  });
+
+  // テスト内容: Account Detailの401でApp認証状態を破棄してログイン画面へ戻ることを確認する。
+  // 必要な理由: 公開IDを含む直接URLでも認証切れ後の口座情報を残さないため。
+  test("returns to login when the Account Detail request is unauthorized", async () => {
+    mockedApiFetch.mockImplementation(async (path) => {
+      if (path === "/api/auth/me") {
+        return jsonResponse({ user: authenticatedUser });
+      }
+      if (path === "/api/dashboard") {
+        return jsonResponse({ cards: [] });
+      }
+      if (path === `/api/finance/accounts/${financeAccount.id}`) {
+        return jsonResponse({ error: { code: "unauthorized" } }, 401);
+      }
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+
+    renderApp(`/finance-lab/accounts/${financeAccount.id}`);
 
     expect(await screen.findByRole("heading", { name: "ログイン" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Finance navigation")).not.toBeInTheDocument();

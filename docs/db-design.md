@@ -74,7 +74,7 @@ DBML上の将来候補（migration未実装）:
 
 - `finance_accounts(user_id, status)` は所有者別の有効口座集計に使う
 - `finance_transactions(user_id, COALESCE(posted_at, authorized_at) DESC, id DESC)` は、確定日時を優先するSummaryの最近の取引取得に使う
-- `finance_transactions(account_id, authorized_at DESC, id DESC)` は口座詳細で使う
+- `finance_transactions(account_id, COALESCE(posted_at, authorized_at) DESC, id DESC)` は、口座詳細の直近取引取得に使う
 - index追加は実queryと `EXPLAIN` を確認し、未使用の先回りを避ける
 
 ## 5. 保留事項
@@ -100,3 +100,4 @@ DBML上の将来候補（migration未実装）:
 | 2026-08-11 | 認証・sessionの初期設計を記載 |
 | 2026-08-11 | Finance残高概要の3テーブル、命名規則、versioned migration方針を追加 |
 | 2026-08-11 | Finance金額API契約とSummary query用expression indexを更新 |
+| 2026-08-11 | Finance口座詳細の取引順とaccount別expression indexを追加 |

@@ -58,8 +58,8 @@ func TestMigrateAppliesOnceAndDetectsChanges(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&migrationCount); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if migrationCount != 3 {
-		t.Fatalf("expected 3 applied migrations, got %d", migrationCount)
+	if migrationCount != 4 {
+		t.Fatalf("expected 4 applied migrations, got %d", migrationCount)
 	}
 
 	var categoryCount int
@@ -86,6 +86,58 @@ func TestMigrateAppliesOnceAndDetectsChanges(t *testing.T) {
 		!strings.Contains(recentIndexDefinition, "user_id") ||
 		!strings.Contains(recentIndexDefinition, "id DESC") {
 		t.Fatalf("expected summary ordering expression in index, got %s", recentIndexDefinition)
+	}
+
+	// 口座詳細queryと口座別indexの式が一致し、plannerがSortなしで利用できることを確認する。
+	// 必要な理由: 固定5件でも口座の全取引sortが発生する性能回帰を防ぐため。
+	var accountRecentIndexDefinition string
+	if err := db.QueryRowContext(ctx, `
+		SELECT indexdef
+		FROM pg_indexes
+		WHERE schemaname = current_schema()
+		  AND tablename = 'finance_transactions'
+		  AND indexname = 'finance_transactions_account_recent_idx'
+	`).Scan(&accountRecentIndexDefinition); err != nil {
+		t.Fatalf("read account recent transaction index: %v", err)
+	}
+	if !strings.Contains(accountRecentIndexDefinition, "COALESCE(posted_at, authorized_at) DESC") ||
+		!strings.Contains(accountRecentIndexDefinition, "account_id") ||
+		!strings.Contains(accountRecentIndexDefinition, "id DESC") {
+		t.Fatalf("expected account detail ordering expression in index, got %s", accountRecentIndexDefinition)
+	}
+
+	planConnection, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatalf("get connection for account recent query plan: %v", err)
+	}
+	defer planConnection.Close()
+	if _, err := planConnection.ExecContext(ctx, `SET enable_seqscan = off`); err != nil {
+		t.Fatalf("disable sequential scan for index plan assertion: %v", err)
+	}
+	planRows, err := planConnection.QueryContext(ctx, `
+		EXPLAIN (COSTS OFF)
+		SELECT t.public_id, c.code, c.label
+		FROM finance_transactions t
+		LEFT JOIN finance_transaction_categories c ON c.code = t.category_code
+		WHERE t.account_id = 1 AND t.user_id = 1
+		ORDER BY COALESCE(t.posted_at, t.authorized_at) DESC, t.id DESC
+		LIMIT 5
+	`)
+	if err != nil {
+		t.Fatalf("explain account recent query: %v", err)
+	}
+	defer planRows.Close()
+	var planLines []string
+	for planRows.Next() {
+		var line string
+		if err := planRows.Scan(&line); err != nil {
+			t.Fatalf("scan account recent query plan: %v", err)
+		}
+		planLines = append(planLines, line)
+	}
+	plan := strings.Join(planLines, "\n")
+	if !strings.Contains(plan, "finance_transactions_account_recent_idx") || strings.Contains(plan, "Sort") {
+		t.Fatalf("expected account recent index without Sort, got plan:\n%s", plan)
 	}
 
 	if _, err := db.ExecContext(ctx, `UPDATE schema_migrations SET checksum = 'changed' WHERE version = 1`); err != nil {

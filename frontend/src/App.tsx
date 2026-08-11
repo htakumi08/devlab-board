@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Link,
   Navigate,
@@ -9,8 +10,11 @@ import {
   useLocation,
 } from "react-router-dom";
 
+import { FinanceAccountDetail } from "./features/finance/FinanceAccountDetail";
+import { FinanceAccounts } from "./features/finance/FinanceAccounts";
 import { FinanceLayout } from "./features/finance/FinanceLayout";
 import { FinanceOverview } from "./features/finance/FinanceOverview";
+import { financeQueryKeys } from "./features/finance/financeApi";
 import { UserAgentLab } from "./features/user-agent/UserAgentLab";
 import { apiFetch } from "./lib/api";
 
@@ -34,6 +38,7 @@ type ApiError = {
 };
 
 export function App() {
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -112,17 +117,28 @@ export function App() {
 
   async function handleLogout() {
     setMessage("");
-    await apiFetch("/api/auth/logout", { method: "POST" });
-    clearSessionState();
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // logout APIが失敗しても、client上のsessionと機微なFinance cacheは残さない。
+    } finally {
+      clearSessionState();
+    }
   }
 
-  function clearSessionState() {
+  const clearSessionState = useCallback(() => {
+    // signalを消費するFinance queryを中断してから、prefix単位で機微cacheを即時破棄する。
+    void queryClient.cancelQueries(
+      { queryKey: financeQueryKeys.all },
+      { silent: true },
+    );
+    queryClient.removeQueries({ queryKey: financeQueryKeys.all });
     setMode("login");
     setMessage("");
     setUser(null);
     setCards([]);
     setPassword("");
-  }
+  }, [queryClient]);
 
   if (isLoading) {
     return (
@@ -240,6 +256,24 @@ export function App() {
                 onLogout={handleLogout}
                 onSessionExpired={clearSessionState}
                 user={{ email: user.email, name: user.name }}
+              />
+            }
+          />
+          <Route
+            path="accounts"
+            element={
+              <FinanceAccounts
+                onLogout={handleLogout}
+                onSessionExpired={clearSessionState}
+              />
+            }
+          />
+          <Route
+            path="accounts/:accountId"
+            element={
+              <FinanceAccountDetail
+                onLogout={handleLogout}
+                onSessionExpired={clearSessionState}
               />
             }
           />

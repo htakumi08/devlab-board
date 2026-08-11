@@ -18,15 +18,22 @@ import (
 const sessionUserIDKey = "user_id"
 
 type App struct {
-	config         Config
-	users          UserStore
-	sessions       *scs.SessionManager
-	financeSummary FinanceSummaryReader
+	config          Config
+	users           UserStore
+	sessions        *scs.SessionManager
+	financeSummary  FinanceSummaryReader
+	financeAccounts FinanceAccountReader
 }
 
 // FinanceSummaryReader is the use-case boundary consumed by the HTTP adapter.
 type FinanceSummaryReader interface {
 	Summary(ctx context.Context, userID int64) (finance.Summary, error)
+}
+
+// FinanceAccountReader is the account-specific use-case boundary consumed by the HTTP adapter.
+type FinanceAccountReader interface {
+	Accounts(ctx context.Context, userID int64) ([]finance.Account, error)
+	Account(ctx context.Context, userID int64, publicAccountID string) (finance.AccountDetail, error)
 }
 
 type healthResponse struct {
@@ -55,19 +62,32 @@ type userAgentResponse struct {
 	UserAgent string `json:"userAgent"`
 }
 
-func New(config Config, users UserStore, sessions *scs.SessionManager, financeSummary FinanceSummaryReader) *App {
+func New(
+	config Config,
+	users UserStore,
+	sessions *scs.SessionManager,
+	financeSummary FinanceSummaryReader,
+	financeAccounts FinanceAccountReader,
+) *App {
 	return &App{
-		config:         config,
-		users:          users,
-		sessions:       sessions,
-		financeSummary: financeSummary,
+		config:          config,
+		users:           users,
+		sessions:        sessions,
+		financeSummary:  financeSummary,
+		financeAccounts: financeAccounts,
 	}
 }
 
 func NewTestHandler() http.Handler {
 	sessionManager := scs.New()
 	sessionManager.Cookie.Name = "devlab_session"
-	return New(Config{AppEnv: "test"}, NewMemoryUserStore(), sessionManager, emptyFinanceSummaryReader{}).Routes()
+	return New(
+		Config{AppEnv: "test"},
+		NewMemoryUserStore(),
+		sessionManager,
+		emptyFinanceSummaryReader{},
+		emptyFinanceAccountReader{},
+	).Routes()
 }
 
 func (a *App) Routes() http.Handler {
@@ -81,6 +101,8 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("GET /api/dashboard", a.requireSession(http.HandlerFunc(a.handleDashboard)))
 	mux.Handle("GET /api/user-agent", a.requireSession(http.HandlerFunc(a.handleUserAgent)))
 	mux.Handle("GET /api/finance/summary", a.requireSession(http.HandlerFunc(a.handleFinanceSummary)))
+	mux.Handle("GET /api/finance/accounts", a.requireSession(http.HandlerFunc(a.handleFinanceAccounts)))
+	mux.Handle("GET /api/finance/accounts/{accountId}", a.requireSession(http.HandlerFunc(a.handleFinanceAccount)))
 
 	return a.cors(a.sessions.LoadAndSave(mux))
 }
@@ -229,6 +251,41 @@ func (a *App) handleFinanceSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]finance.Summary{"summary": summary})
 }
 
+func (a *App) handleFinanceAccounts(w http.ResponseWriter, r *http.Request) {
+	userID := a.sessions.GetInt64(r.Context(), sessionUserIDKey)
+	accounts, err := a.financeAccounts.Accounts(r.Context(), userID)
+	if err != nil {
+		log.Printf("finance accounts unavailable")
+		writeError(w, http.StatusInternalServerError, "finance_accounts_unavailable", "Finance口座一覧を取得できませんでした")
+		return
+	}
+	if accounts == nil {
+		accounts = make([]finance.Account, 0)
+	}
+	writeJSON(w, http.StatusOK, map[string][]finance.Account{"accounts": accounts})
+}
+
+func (a *App) handleFinanceAccount(w http.ResponseWriter, r *http.Request) {
+	userID := a.sessions.GetInt64(r.Context(), sessionUserIDKey)
+	detail, err := a.financeAccounts.Account(r.Context(), userID, r.PathValue("accountId"))
+	if errors.Is(err, finance.ErrAccountNotFound) {
+		writeError(w, http.StatusNotFound, "finance_account_not_found", "口座が見つかりません")
+		return
+	}
+	if err != nil {
+		log.Printf("finance account unavailable")
+		writeError(w, http.StatusInternalServerError, "finance_account_unavailable", "Finance口座を取得できませんでした")
+		return
+	}
+	if detail.RecentTransactions == nil {
+		detail.RecentTransactions = make([]finance.Transaction, 0)
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Account            finance.Account       `json:"account"`
+		RecentTransactions []finance.Transaction `json:"recentTransactions"`
+	}{Account: detail.Account, RecentTransactions: detail.RecentTransactions})
+}
+
 type emptyFinanceSummaryReader struct{}
 
 func (emptyFinanceSummaryReader) Summary(_ context.Context, _ int64) (finance.Summary, error) {
@@ -236,6 +293,16 @@ func (emptyFinanceSummaryReader) Summary(_ context.Context, _ int64) (finance.Su
 		Balances:           make([]finance.Balance, 0),
 		RecentTransactions: make([]finance.Transaction, 0),
 	}, nil
+}
+
+type emptyFinanceAccountReader struct{}
+
+func (emptyFinanceAccountReader) Accounts(_ context.Context, _ int64) ([]finance.Account, error) {
+	return make([]finance.Account, 0), nil
+}
+
+func (emptyFinanceAccountReader) Account(_ context.Context, _ int64, _ string) (finance.AccountDetail, error) {
+	return finance.AccountDetail{}, finance.ErrAccountNotFound
 }
 
 func (a *App) startSession(r *http.Request, userID int64) error {

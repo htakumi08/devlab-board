@@ -18,6 +18,12 @@ description: 実装、docs、workflow 変更後の確認に使う。
 - Terraform: `terraform fmt -check -recursive`、対象 env の `terraform validate`
 - Docs/workflow: file tree、相対 path、リンク、見出し、参照先の存在確認
 
+## Finance読み取りMVP
+
+- PostgreSQL統合testを `RUN_DB_TESTS=1` で実行する。
+- [Finance読み取りMVP ローカル検証Runbook](../../docs/runbooks/finance-mvp-local-verification.md) に従い、Docker Composeでsynthetic seed → 共通smoke → cleanを実行する。
+- smokeが失敗してもcleanを実行し、認証情報と金融response bodyをcommand outputや報告へ残さない。
+
 ## 報告に含めるもの
 
 - 実行したコマンド

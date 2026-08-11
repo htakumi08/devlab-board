@@ -3,6 +3,9 @@
 ## 方針
 
 - 変更範囲に対して最小限だが意味のある検証を行う。
+- 新機能と不具合修正は、守るべき挙動を表すtestを先に追加し、対象testが期待した理由で失敗するREDを確認してから最小実装でGREENにする。
+- REDではcompile errorだけで終わらせず、可能な範囲で未実装の挙動に対応するassertion failureまで進める。実行した対象testと失敗理由を作業結果へ残す。
+- GREEN後は重複と責務を見直し、refactor後に対象testと変更領域の全testを再実行する。
 - 失敗を再現できる bugfix では、先に失敗するテストまたは再現手順を確認する。
 - 大きな E2E より、API handler、component boundary、Terraform validate など近い層から固める。
 - 実行できなかった検証は、理由と残リスクを報告する。

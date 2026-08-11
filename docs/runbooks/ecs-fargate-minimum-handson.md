@@ -1,7 +1,7 @@
 ---
 title: Terraform ではじめる ECS Fargate 最小構成ハンズオン
 status: draft
-last_updated: 2026-07-24
+last_updated: 2026-07-27
 audience: Terraform と ECS Fargate を初めて構築する開発者
 ---
 
@@ -29,6 +29,8 @@ audience: Terraform と ECS Fargate を初めて構築する開発者
 ## 1. このハンズオンのゴール
 
 このハンズオンでは、Terraform の導入から始めて、AWS 上で Web コンテナを 1 個動かし、確認後にすべて削除する。
+
+AWS コンソールで同じ構成を一度手作業してから進みたい場合は、先に [`ecs-fargate-minimum-console-handson.md`](./ecs-fargate-minimum-console-handson.md) を実施する。コンソール版のリソースをすべて削除した後、この Terraform 版で同じ構成を再作成する。
 
 完了時には、次の関係を説明できる状態を目指す。
 
@@ -791,6 +793,7 @@ terraform apply
 
 | 日付 | 内容 |
 | --- | --- |
+| 2026-07-27 | 同一構成を AWS コンソールで作成する事前ハンズオンへのリンクを追加 |
 | 2026-07-24 | 編集可能な Draw.io 構成図へのリンクを追加 |
 | 2026-07-23 | Terraform 導入から ECS Fargate 最小構成の作成・確認・削除までを新規作成 |
 

@@ -6,6 +6,7 @@
 - `README.md` は repository level の目的と現在段階を示す。
 - `docs/app-service.md` はアプリの目的、初期 MVP、AWS 構成比較の前提を示す。
 - `docs/db-design.md` と `docs/db-design.dbml` はデータ設計の参照元にする。
+- `docs/git-branch-strategy.md` はbranchの役割、作成元、merge先、release、hotfix、AWS比較実験の運用を定義する。
 - 実装状況は code、tests、Docker Compose、Terraform、README から得られる evidence を優先する。
 - DB 方針のように docs と実装がずれている場合は、作業前に正とする対象を確認または明示する。
 

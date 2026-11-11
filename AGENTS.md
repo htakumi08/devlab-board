@@ -35,6 +35,7 @@ DB 方針は PostgreSQL を正とします。ローカル開発の `docker-compo
 - Codex が明示起動・自動発見する project skill は `.agents/skills/` に置き、workflow 内部からだけ使う補助ガイドは `codex-workflow/skills/` に置く。
 - 生成物、local dependency、credentials、Terraform state、個人環境のログは commit しない。
 - サブエージェントを使う場合は、`codex-workflow/roles/` で責務と触ってよい範囲を明確にする。
+- 機能開発では `codex-workflow/playbooks/agent-loop.md` を入口にする。要件・設計・アーキテクチャ・レビューは Sol、実装・定型作業・定義済み Playwright ケースは Luna に割り当て、使える実行環境ではモデルを明示して起動する。
 
 ## 想定構成
 

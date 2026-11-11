@@ -9,6 +9,7 @@
     "build": "node ./node_modules/typescript/bin/tsc -b && node ./node_modules/vite/bin/vite.js build",
     "preview": "node ./node_modules/vite/bin/vite.js preview",
     "test": "node ./node_modules/vitest/vitest.mjs run",
+    "test:e2e": "playwright test",
     "test:coverage": "node ./node_modules/vitest/vitest.mjs run --coverage"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "react-router-dom": "7.18.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "16.3.0",

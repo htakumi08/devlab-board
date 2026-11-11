@@ -1213,10 +1213,20 @@ Infrastructure:
 
 ### Slice 4: 支出集計
 
+#### Slice 4A: 支出集計API
+
 - category master / mapping。
-- 期間集計。
+- 必須UTC期間の確定支出集計。
+- 通貨分離と集計元データの `asOf`。
+- ownership、status、期間境界の統合test。
+
+#### Slice 4B: 支出集計UI
+
+- 期間選択。
 - chart と数値代替。
-- timezone、currency、asOf。
+- loading、empty、error、mobile表示。
+
+ユーザーtimezone対応は設定の正が未実装のため初版ではUTCを明示し、後続変更へ分ける。集計query用indexは実行計画で必要性を確認してから別変更として追加する。
 
 ### Slice 5: Sandbox 金融機関接続
 
@@ -1460,3 +1470,4 @@ Repository 内の参照資料:
 | 2026-08-11 | Slice 2の口座詳細previewと金融機関groupingの実装境界を確定 |
 | 2026-08-11 | Slice 3を取引履歴基本版3Aとfilter・sort版3Bへ分割 |
 | 2026-08-11 | Slice 3Bのquery・UTC日付・cursor契約と、synthetic seed・MVP smokeの完了作業を確定 |
+| 2026-09-24 | Slice 4を支出集計APIとUIへ分割し、初版のUTC期間・通貨・asOf境界を確定 |

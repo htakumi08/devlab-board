@@ -165,6 +165,7 @@ func newFinanceTestHandler(reader FinanceSummaryReader) http.Handler {
 		reader,
 		emptyFinanceAccountReader{},
 		emptyFinanceTransactionReader{},
+		emptyFinanceSpendingReader{},
 	).Routes()
 }
 

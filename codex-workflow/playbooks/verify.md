@@ -15,6 +15,7 @@ description: 実装、docs、workflow 変更後の確認に使う。
 
 - Backend: `go test ./...`
 - Frontend: `yarn build`
+- E2E: 合意済みの画面ケースがある場合、frontendで `yarn test:e2e`。モック利用の結果と実APIを通した結果を区別する。
 - Terraform: `terraform fmt -check -recursive`、対象 env の `terraform validate`
 - Docs/workflow: file tree、相対 path、リンク、見出し、参照先の存在確認
 

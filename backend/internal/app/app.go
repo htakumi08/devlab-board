@@ -25,6 +25,7 @@ type App struct {
 	financeSummary      FinanceSummaryReader
 	financeAccounts     FinanceAccountReader
 	financeTransactions FinanceTransactionReader
+	financeSpending     FinanceSpendingReader
 }
 
 // FinanceSummaryReader is the use-case boundary consumed by the HTTP adapter.
@@ -42,6 +43,11 @@ type FinanceAccountReader interface {
 type FinanceTransactionReader interface {
 	Transactions(ctx context.Context, userID int64, request finance.TransactionListRequest) (finance.TransactionPage, error)
 	Categories(ctx context.Context) ([]finance.Category, error)
+}
+
+// FinanceSpendingReader is the spending aggregation use-case boundary consumed by the HTTP adapter.
+type FinanceSpendingReader interface {
+	SpendingSummary(ctx context.Context, userID int64, request finance.SpendingSummaryRequest) (finance.SpendingSummary, error)
 }
 
 type healthResponse struct {
@@ -77,6 +83,7 @@ func New(
 	financeSummary FinanceSummaryReader,
 	financeAccounts FinanceAccountReader,
 	financeTransactions FinanceTransactionReader,
+	financeSpending FinanceSpendingReader,
 ) *App {
 	return &App{
 		config:              config,
@@ -85,6 +92,7 @@ func New(
 		financeSummary:      financeSummary,
 		financeAccounts:     financeAccounts,
 		financeTransactions: financeTransactions,
+		financeSpending:     financeSpending,
 	}
 }
 
@@ -98,6 +106,7 @@ func NewTestHandler() http.Handler {
 		emptyFinanceSummaryReader{},
 		emptyFinanceAccountReader{},
 		emptyFinanceTransactionReader{},
+		emptyFinanceSpendingReader{},
 	).Routes()
 }
 
@@ -116,8 +125,51 @@ func (a *App) Routes() http.Handler {
 	mux.Handle("GET /api/finance/accounts/{accountId}", a.requireSession(http.HandlerFunc(a.handleFinanceAccount)))
 	mux.Handle("GET /api/finance/transactions", a.requireSession(http.HandlerFunc(a.handleFinanceTransactions)))
 	mux.Handle("GET /api/finance/categories", a.requireSession(http.HandlerFunc(a.handleFinanceCategories)))
+	mux.Handle("GET /api/finance/spending-summary", a.requireSession(http.HandlerFunc(a.handleFinanceSpendingSummary)))
 
 	return a.cors(a.sessions.LoadAndSave(mux))
+}
+
+func (a *App) handleFinanceSpendingSummary(w http.ResponseWriter, r *http.Request) {
+	request, ok := parseFinanceSpendingSummaryRequest(r.URL.RawQuery)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "finance_spending_summary_invalid_query", "支出集計の期間指定が正しくありません")
+		return
+	}
+
+	userID := a.sessions.GetInt64(r.Context(), sessionUserIDKey)
+	summary, err := a.financeSpending.SpendingSummary(r.Context(), userID, request)
+	if errors.Is(err, finance.ErrInvalidSpendingQuery) {
+		writeError(w, http.StatusBadRequest, "finance_spending_summary_invalid_query", "支出集計の期間指定が正しくありません")
+		return
+	}
+	if err != nil {
+		log.Printf("finance spending summary unavailable")
+		writeError(w, http.StatusInternalServerError, "finance_spending_summary_unavailable", "Finance支出集計を取得できませんでした")
+		return
+	}
+	if summary.Currencies == nil {
+		summary.Currencies = make([]finance.SpendingCurrency, 0)
+	}
+	writeJSON(w, http.StatusOK, map[string]finance.SpendingSummary{"spendingSummary": summary})
+}
+
+func parseFinanceSpendingSummaryRequest(rawQuery string) (finance.SpendingSummaryRequest, bool) {
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil || len(values) != 2 {
+		return finance.SpendingSummaryRequest{}, false
+	}
+	for key, entries := range values {
+		if (key != "date_from" && key != "date_to") || len(entries) != 1 || entries[0] == "" {
+			return finance.SpendingSummaryRequest{}, false
+		}
+	}
+	dateFrom, hasDateFrom := values["date_from"]
+	dateTo, hasDateTo := values["date_to"]
+	if !hasDateFrom || !hasDateTo {
+		return finance.SpendingSummaryRequest{}, false
+	}
+	return finance.SpendingSummaryRequest{DateFrom: dateFrom[0], DateTo: dateTo[0]}, true
 }
 
 func (a *App) handleRoot(w http.ResponseWriter, _ *http.Request) {
@@ -405,6 +457,14 @@ func (emptyFinanceTransactionReader) Transactions(_ context.Context, _ int64, _ 
 
 func (emptyFinanceTransactionReader) Categories(_ context.Context) ([]finance.Category, error) {
 	return make([]finance.Category, 0), nil
+}
+
+type emptyFinanceSpendingReader struct{}
+
+func (emptyFinanceSpendingReader) SpendingSummary(_ context.Context, _ int64, request finance.SpendingSummaryRequest) (finance.SpendingSummary, error) {
+	return finance.SpendingSummary{
+		DateFrom: request.DateFrom, DateTo: request.DateTo, Timezone: "UTC", Currencies: make([]finance.SpendingCurrency, 0),
+	}, nil
 }
 
 func (a *App) startSession(r *http.Request, userID int64) error {

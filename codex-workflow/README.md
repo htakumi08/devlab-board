@@ -10,8 +10,10 @@
 - EC2 Auto Scaling、Serverless、ECS Fargate の構成比較
 - docs 配下の設計、DB、運用、実装メモの作成・更新
 - GitHub PRを取得・レビューし、COMMENTレビューを投稿するrepository skill
+- 小規模から大規模まで、架空の業務要件も扱う基本設計・詳細設計の演習用repository skill
 - 境界が明確なサブエージェント作業向けの短いロール
 - 計画、実装、検証、レビュー、ドキュメント、リリース準備向けの短いプレイブック
+- Sol と Luna の担当分担、検証結果から修正へ戻る機能開発ループ
 
 ## ディレクトリ構成
 
@@ -26,6 +28,8 @@ codex-workflow/
 
 .agents/
 `-- skills/
+    |-- design-practice/
+    |-- feature-development/
     `-- pr-review/
 ```
 
@@ -66,6 +70,14 @@ flowchart TD
 - `roles/`: サブエージェントに渡すときの責務境界。
 - `skills/`: Go HTTP API、React TypeScript、Terraform AWS、documentation workflow のworkflow内部向けガイド。
 - `../.agents/skills/pr-review/`: GitHub PR URL、PR、ブランチ差分、実装差分を固定観点でレビューし、GitHub PRではCOMMENTレビューを投稿するrepository skill。
+- `../.agents/skills/design-practice/`: 現行アプリや架空の業務要件を題材に、規模に応じた基本設計と詳細設計を段階的にレビューするrepository skill。
+- `../.agents/skills/feature-development/`: 機能開発の反復入口。詳細は `playbooks/agent-loop.md` に集約する。
+
+## 機能開発ハーネス
+
+`playbooks/agent-loop.md` に Sol / Luna のモデル指定、サブエージェントへの引き渡し項目、受け入れ条件から検証・修正までのループを定義する。Sol が要件定義、設計、アーキテクチャ、レビューと統合を担当し、Luna が実装、定型作業、確定した Playwright E2E ケースを担当する。`roles/e2e-tester.md` は E2E 担当の境界を示す。E2E の実行方法は `../frontend/README.md` を参照する。
+
+モデルはサブエージェント起動時に明示する。role 文書だけで実行モデルが自動的に切り替わるわけではない。受け入れ条件が未達なら原因を特定して同じ担当へ戻し、検証結果を更新する。
 
 ## ワークフロー構成
 

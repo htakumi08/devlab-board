@@ -44,6 +44,9 @@ frontend/
 - preview: `yarn preview`
 - test: `yarn test`
 - coverage: `yarn test:coverage`
+- E2E: `yarn test:e2e`（初回は `yarn playwright install chromium`）
+
+`e2e/` は Playwright のブラウザテストを置く。`playwright.config.ts` がテスト用の Vite サーバーを起動する。認証と Finance の画面導線をモック API で確認するケースは、Go API や PostgreSQL の結合試験とは別に扱う。実 API を含む Finance の確認には `../docs/runbooks/finance-mvp-local-verification.md` を使う。
 
 ## この段階での方針
 

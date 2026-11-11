@@ -29,6 +29,8 @@ backend/
       account.go
       account_repository.go
       summary.go
+      spending.go
+      spending_repository.go
       postgres_repository.go
       transaction.go
       transaction_repository.go
@@ -106,8 +108,11 @@ go run ./cmd/grpc-client \
 - `GET /api/finance/accounts/{accountId}`: 現在ユーザーの口座詳細と最近の取引5件を返す
 - `GET /api/finance/transactions`: 現在ユーザーの取引をfilter・sort対応のcursor paginationで返す
 - `GET /api/finance/categories`: 取引filter用のカテゴリーmasterを表示順で返す
+- `GET /api/finance/spending-summary`: 必須のUTC期間について確定支出を通貨・カテゴリー別に集計する
 
 取引一覧は、単一値の`account_id`、`date_from`、`date_to`、`category`、`direction`、`status`、`sort`、`cursor`、`limit`を受け付ける。日付はUTC暦日の`YYYY-MM-DD`、`sort`は`newest`または`oldest`とし、filter・sortを変更するときはcursorを破棄して先頭ページから取得する。
+
+支出集計は単一値の`date_from`と`date_to`を必須とし、最大366日間の`posted`かつ`debit`の取引だけを集計する。日付境界は取引一覧と同じUTC暦日を使い、異なる通貨は合算しない。
 
 `/api/auth/register` と `/api/auth/login` 以外の `/api/` endpoint は session 認証を必要とする。
 
@@ -120,7 +125,7 @@ go run ./cmd/grpc-client \
 - AWS環境ではapplication起動とmigration jobを分離する
 - Finance専用テーブルは `finance_` プレフィックスへ統一する
 
-DB定義は [`../docs/db-design.dbml`](../docs/db-design.dbml)、Finance API契約は [`../docs/api/finance-summary.md`](../docs/api/finance-summary.md)、[`../docs/api/finance-accounts.md`](../docs/api/finance-accounts.md)、[`../docs/api/finance-transactions.md`](../docs/api/finance-transactions.md) を参照する。
+DB定義は [`../docs/db-design.dbml`](../docs/db-design.dbml)、Finance API契約は [`../docs/api/finance-summary.md`](../docs/api/finance-summary.md)、[`../docs/api/finance-accounts.md`](../docs/api/finance-accounts.md)、[`../docs/api/finance-transactions.md`](../docs/api/finance-transactions.md)、[`../docs/api/finance-spending-summary.md`](../docs/api/finance-spending-summary.md) を参照する。
 決定的synthetic fixtureの投入・削除と2ユーザー共通smokeは [`../docs/runbooks/finance-mvp-local-verification.md`](../docs/runbooks/finance-mvp-local-verification.md) を参照する。
 
 ## 認証 / セッション

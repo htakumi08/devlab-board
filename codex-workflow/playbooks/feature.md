@@ -5,6 +5,8 @@ description: Go API と React UI を縦に通す境界の明確な機能を実�
 
 # 機能実装プレイブック
 
+複数担当で進める機能開発では、先に [機能開発ループ](./agent-loop.md) を読む。
+
 1. ユーザーワークフローと実験機能の目的を確認する。
 2. API boundary、request、response、error shape、DB の要否を定義する。
 3. Go backend の handler、use case、test を実装する。

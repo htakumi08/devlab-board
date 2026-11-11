@@ -634,6 +634,197 @@ func TestPostgresRepositoryTransactionsFiltersSortsAndPaginates(t *testing.T) {
 	}
 }
 
+// TestPostgresRepositorySpendingSummary は、確定支出を所有者・期間・通貨・カテゴリーで正確に集計することを確認する。
+// 必要な理由: 他ユーザーや未確定・取消・入金を混ぜず、巨大なminor unit合計と未分類を失わないため。
+func TestPostgresRepositorySpendingSummary(t *testing.T) {
+	if os.Getenv("RUN_DB_TESTS") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run PostgreSQL integration tests")
+	}
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := platformpostgres.Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	ownerID := insertTestUser(t, ctx, tx, "spending-owner")
+	otherID := insertTestUser(t, ctx, tx, "spending-other")
+	ownerJPYAccountID, _ := insertTestAccount(t, ctx, tx, ownerID, "JPY", 180000, 165000)
+	ownerUSDAccountID, _ := insertTestAccount(t, ctx, tx, ownerID, "USD", 12345, 12000)
+	otherAccountID, _ := insertTestAccount(t, ctx, tx, otherID, "JPY", 999999, 999999)
+	periodStart := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+	latestIncludedUpdate := periodStart.AddDate(0, 0, 20)
+
+	insertSpendingTransactionRecord(t, ctx, tx, spendingTransactionRecord{
+		UserID: ownerID, AccountID: ownerJPYAccountID, AmountMinor: 1000, Currency: "JPY",
+		Direction: "debit", Status: "posted", Category: stringPointer("groceries"), OccurredAt: periodStart, UpdatedAt: periodStart.AddDate(0, 0, 10),
+	})
+	insertSpendingTransactionRecord(t, ctx, tx, spendingTransactionRecord{
+		UserID: ownerID, AccountID: ownerJPYAccountID, AmountMinor: 2000, Currency: "JPY",
+		Direction: "debit", Status: "posted", Category: stringPointer("groceries"), OccurredAt: periodStart.AddDate(0, 0, 1), UpdatedAt: latestIncludedUpdate,
+	})
+	insertSpendingTransactionRecord(t, ctx, tx, spendingTransactionRecord{
+		UserID: ownerID, AccountID: ownerJPYAccountID, AmountMinor: 500, Currency: "JPY",
+		Direction: "debit", Status: "posted", OccurredAt: periodStart.AddDate(0, 0, 2), UpdatedAt: periodStart.AddDate(0, 0, 12),
+	})
+	for _, amount := range []int64{math.MaxInt64, math.MaxInt64} {
+		insertSpendingTransactionRecord(t, ctx, tx, spendingTransactionRecord{
+			UserID: ownerID, AccountID: ownerUSDAccountID, AmountMinor: amount, Currency: "USD",
+			Direction: "debit", Status: "posted", Category: stringPointer("utilities"), OccurredAt: periodStart.AddDate(0, 0, 3), UpdatedAt: periodStart.AddDate(0, 0, 13),
+		})
+	}
+
+	// 入金、未確定、取消、期間外、他所有者は集計対象から除外する。
+	excluded := []spendingTransactionRecord{
+		{UserID: ownerID, AccountID: ownerJPYAccountID, AmountMinor: 9000, Currency: "JPY", Direction: "credit", Status: "posted", Category: stringPointer("income"), OccurredAt: periodStart.AddDate(0, 0, 4), UpdatedAt: latestIncludedUpdate.Add(time.Hour)},
+		{UserID: ownerID, AccountID: ownerJPYAccountID, AmountMinor: 9000, Currency: "JPY", Direction: "debit", Status: "pending", Category: stringPointer("groceries"), OccurredAt: periodStart.AddDate(0, 0, 5), UpdatedAt: latestIncludedUpdate.Add(time.Hour)},
+		{UserID: ownerID, AccountID: ownerJPYAccountID, AmountMinor: 9000, Currency: "JPY", Direction: "debit", Status: "reversed", Category: stringPointer("groceries"), OccurredAt: periodStart.AddDate(0, 0, 6), UpdatedAt: latestIncludedUpdate.Add(time.Hour)},
+		{UserID: ownerID, AccountID: ownerJPYAccountID, AmountMinor: 9000, Currency: "JPY", Direction: "debit", Status: "posted", Category: stringPointer("groceries"), OccurredAt: periodStart.AddDate(0, 1, 0), UpdatedAt: latestIncludedUpdate.Add(time.Hour)},
+		{UserID: otherID, AccountID: otherAccountID, AmountMinor: 9000, Currency: "JPY", Direction: "debit", Status: "posted", Category: stringPointer("groceries"), OccurredAt: periodStart.AddDate(0, 0, 7), UpdatedAt: latestIncludedUpdate.Add(time.Hour)},
+	}
+	for _, transaction := range excluded {
+		insertSpendingTransactionRecord(t, ctx, tx, transaction)
+	}
+
+	summary, err := NewPostgresRepository(tx).SpendingSummary(ctx, ownerID, spendingSummaryQuery{
+		DateFrom: periodStart, DateToExclusive: periodStart.AddDate(0, 1, 0),
+	})
+	if err != nil {
+		t.Fatalf("get spending summary: %v", err)
+	}
+	if summary.AsOf == nil || !summary.AsOf.Equal(latestIncludedUpdate) {
+		t.Fatalf("expected latest included update %s, got %v", latestIncludedUpdate, summary.AsOf)
+	}
+	if len(summary.Currencies) != 2 {
+		t.Fatalf("expected JPY and USD groups, got %#v", summary.Currencies)
+	}
+	jpy := summary.Currencies[0]
+	if jpy.Currency != "JPY" || jpy.TotalAmountMinor != "3500" || len(jpy.Categories) != 2 {
+		t.Fatalf("unexpected JPY aggregate: %#v", jpy)
+	}
+	if jpy.Categories[0].Category == nil || jpy.Categories[0].Category.Code != "groceries" || jpy.Categories[0].AmountMinor != "3000" || jpy.Categories[0].TransactionCount != 2 {
+		t.Fatalf("unexpected groceries aggregate: %#v", jpy.Categories[0])
+	}
+	if jpy.Categories[1].Category != nil || jpy.Categories[1].AmountMinor != "500" || jpy.Categories[1].TransactionCount != 1 {
+		t.Fatalf("unexpected uncategorized aggregate: %#v", jpy.Categories[1])
+	}
+	usd := summary.Currencies[1]
+	if usd.Currency != "USD" || usd.TotalAmountMinor != "18446744073709551614" || len(usd.Categories) != 1 || usd.Categories[0].AmountMinor != "18446744073709551614" {
+		t.Fatalf("expected exact bigint USD aggregate, got %#v", usd)
+	}
+}
+
+// TestPostgresRepositorySpendingSummaryEmpty は、対象支出がない期間を空配列とnull asOfで返すことを確認する。
+// 必要な理由: 支出0件をDB障害と区別し、安定したempty responseを返すため。
+func TestPostgresRepositorySpendingSummaryEmpty(t *testing.T) {
+	if os.Getenv("RUN_DB_TESTS") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run PostgreSQL integration tests")
+	}
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := platformpostgres.Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+	defer tx.Rollback()
+	userID := insertTestUser(t, ctx, tx, "spending-empty")
+
+	summary, err := NewPostgresRepository(tx).SpendingSummary(ctx, userID, spendingSummaryQuery{
+		DateFrom:        time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
+		DateToExclusive: time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("get empty spending summary: %v", err)
+	}
+	if summary.Currencies == nil || len(summary.Currencies) != 0 || summary.AsOf != nil {
+		t.Fatalf("expected empty currencies and null asOf, got %#v", summary)
+	}
+}
+
+// TestPostgresRepositorySpendingSummaryCanUseRecentIndex は、本番相当queryが既存user recent indexで走査可能なことを確認する。
+// 必要な理由: index選択を強制した互換性確認と通常plannerの性能判断を混同せず、先回りのmigrationを避けるため。
+func TestPostgresRepositorySpendingSummaryCanUseRecentIndex(t *testing.T) {
+	if os.Getenv("RUN_DB_TESTS") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run PostgreSQL integration tests")
+	}
+	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := platformpostgres.Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	connection, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatalf("get query plan connection: %v", err)
+	}
+	defer connection.Close()
+	if _, err := connection.ExecContext(ctx, `SET enable_seqscan = off`); err != nil {
+		t.Fatalf("disable sequential scan: %v", err)
+	}
+	if _, err := connection.ExecContext(ctx, `SET enable_bitmapscan = off`); err != nil {
+		t.Fatalf("disable bitmap scan: %v", err)
+	}
+	rows, err := connection.QueryContext(ctx, `
+		EXPLAIN (COSTS OFF)
+		SELECT
+			t.currency,
+			c.code,
+			c.label,
+			SUM(t.amount_minor)::text,
+			COUNT(*),
+			SUM(SUM(t.amount_minor)) OVER (PARTITION BY t.currency)::text,
+			MAX(MAX(t.updated_at)) OVER ()
+		FROM finance_transactions t
+		JOIN finance_accounts a
+			ON a.id = t.account_id AND a.user_id = t.user_id
+		LEFT JOIN finance_transaction_categories c ON c.code = t.category_code
+		WHERE t.user_id = 1
+			AND t.direction = 'debit'
+			AND t.status = 'posted'
+			AND COALESCE(t.posted_at, t.authorized_at) >= '2026-08-01T00:00:00Z'
+			AND COALESCE(t.posted_at, t.authorized_at) < '2026-09-01T00:00:00Z'
+		GROUP BY t.currency, c.code, c.label, c.display_order
+		ORDER BY t.currency, SUM(t.amount_minor) DESC, c.display_order NULLS LAST, c.code NULLS LAST
+	`)
+	if err != nil {
+		t.Fatalf("explain spending summary query: %v", err)
+	}
+	defer rows.Close()
+	var lines []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatalf("scan spending summary query plan: %v", err)
+		}
+		lines = append(lines, line)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read spending summary query plan: %v", err)
+	}
+	plan := strings.Join(lines, "\n")
+	if !strings.Contains(plan, "finance_transactions_user_recent_idx") {
+		t.Fatalf("expected production query to support the user recent index, got plan:\n%s", plan)
+	}
+}
+
 // TestPostgresRepositoryTransactionCategories は、category masterをdisplay_orderとcodeの安定順で返すことを確認する。
 // 必要な理由: frontendが選択肢をhard-codeせず、DBを正として毎回同じ順序で表示するため。
 func TestPostgresRepositoryTransactionCategories(t *testing.T) {
@@ -823,6 +1014,38 @@ type filterTransactionRecord struct {
 	Direction    string
 	Status       string
 	AuthorizedAt time.Time
+}
+
+type spendingTransactionRecord struct {
+	UserID      int64
+	AccountID   int64
+	AmountMinor int64
+	Currency    string
+	Direction   string
+	Status      string
+	Category    *string
+	OccurredAt  time.Time
+	UpdatedAt   time.Time
+}
+
+func insertSpendingTransactionRecord(t *testing.T, ctx context.Context, tx *sql.Tx, transaction spendingTransactionRecord) {
+	t.Helper()
+	var postedAt *time.Time
+	if transaction.Status == "posted" {
+		postedAt = &transaction.OccurredAt
+	}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO finance_transactions (
+			public_id, user_id, account_id, name, amount_minor, currency,
+			direction, status, category_code, authorized_at, posted_at, updated_at
+		)
+		VALUES ($1, $2, $3, 'Spending aggregate transaction', $4, $5,
+			$6, $7, $8, $9, $10, $11)
+	`, testUUID(t), transaction.UserID, transaction.AccountID, transaction.AmountMinor, transaction.Currency,
+		transaction.Direction, transaction.Status, transaction.Category, transaction.OccurredAt, postedAt, transaction.UpdatedAt)
+	if err != nil {
+		t.Fatalf("insert spending transaction record: %v", err)
+	}
 }
 
 func insertFilterTransactionRecord(t *testing.T, ctx context.Context, tx *sql.Tx, transaction filterTransactionRecord) string {

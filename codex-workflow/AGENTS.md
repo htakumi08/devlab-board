@@ -7,6 +7,7 @@
 1. まず `../AGENTS.md` でプロジェクト全体の制約を確認する。
 2. `README.md` で workflow の入口と読み順を確認する。
 3. タスクに関係する `rules/` と `playbooks/` だけを読む。
+   機能開発では `playbooks/agent-loop.md` を入口にする。
 4. サブエージェントを使う場合だけ `roles/` を読む。
 5. repository から明示起動・自動発見する skill は `../.agents/skills/`、workflow 内部の補助ガイドは `skills/` を読む。
 
@@ -25,6 +26,7 @@
 - サブエージェントには、触ってよい path と出力形式を明確に渡す。
 - 複数エージェントを使う場合、同じファイルを同時に編集させない。
 - 返却内容はそのまま採用せず、司令塔が repo 状態と差分を確認して統合する。
+- モデルを選べる場合は `playbooks/agent-loop.md` の担当表に従い、起動時に Sol / Luna を明示する。
 
 ## 完了条件
 

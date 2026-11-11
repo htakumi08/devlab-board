@@ -22,6 +22,9 @@
 - secrets、raw credentials、不要な personal data を log に出さない。
 - handler の unit test は `httptest` を基本にする。
 - DB を導入するときは migration、接続設定、test data の置き場を docs と合わせる。
+- DB schema変更では `docs/db-design.dbml`、`docs/db-design.md`、番号付きmigrationを同じ変更単位で更新する。
+- 適用済みmigrationは変更せず、新しいversionを追加する。Finance専用テーブルは `finance_` プレフィックスへ統一する。
+- localではAPI起動時migrationを許容するが、AWS deliveryではapplication起動とmigration jobを分離する。
 
 ## コメント / Docstring
 

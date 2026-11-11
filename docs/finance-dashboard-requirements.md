@@ -689,7 +689,7 @@ sort
 ### 10.2 Response 方針
 
 - API response type は frontend の画面ごとに重複定義せず、Finance API boundary へ集約する。
-- 金額は `amountMinor` と `currency` を返す。
+- 金額はminor unit整数を表す10進文字列の `amountMinor` と `currency` を返し、JSON numberへ変換しない。
 - 日時は ISO 8601 とし、timezone の意味を定義する。
 - 残高・集計には `asOf` または `lastSyncedAt` を含める。
 - 一覧は cursor pagination を優先し、`nextCursor` を返す。
@@ -1181,20 +1181,52 @@ Infrastructure:
 - account card、mask、status。
 - account detail と口座別取引。
 - 他ユーザー account の拒否 test。
+- Account Detailの取引previewは最大5件とし、全履歴・filter・cursor paginationはSlice 3へ分離する。
+- 金融機関別groupingは、`finance_connections` とprovider接続情報を導入するSlice 5へ分離する。
 
 ### Slice 3: 取引履歴
 
+#### Slice 3A: 取引履歴基本版
+
 - `GET /api/finance/transactions`。
-- filter、sort、cursor pagination。
-- URL query と server state。
-- DB index と query plan。
+- 自分の全取引を新しい順で表示。
+- 既定25件、最大100件のcursor pagination。
+- pagination cursorのURL query同期とTanStack Queryのserver state。
+- 既存DB indexと実query planの確認。
+
+#### Slice 3B: 取引履歴filter・sort
+
+- `account_id`、`date_from`、`date_to`、`category`、`direction`、`status` の単一選択filter。
+- 日付はtimezone設定を導入するまでUTC暦日として扱う。
+- `sort=newest|oldest`。未指定は新しい順。
+- filter、sort、paginationのURL query同期。
+- filter・sort変更時はcursorを削除し、pagination時は全条件を維持する。
+- DB category masterを選択肢の正とする。
+- keyword検索は検索対象とindexが未確定で優先度Couldのため、Slice 3Bの対象外とする。
+
+#### 読み取りMVP完了作業
+
+- 既存local userを対象に、決定的IDを使うsynthetic seed / cleanupを用意する。
+- synthetic dataは2口座以上、25件超、全direction・status・category、複数期間、nullable値を含める。
+- Overview、Accounts、Account Detail、Transactions、filter、sort、pagination、logoutを共通smoke testで確認する。
+- MVP受け入れ条件を自動test、browser確認、manual確認へ対応付ける。
 
 ### Slice 4: 支出集計
 
+#### Slice 4A: 支出集計API
+
 - category master / mapping。
-- 期間集計。
+- 必須UTC期間の確定支出集計。
+- 通貨分離と集計元データの `asOf`。
+- ownership、status、期間境界の統合test。
+
+#### Slice 4B: 支出集計UI
+
+- 期間選択。
 - chart と数値代替。
-- timezone、currency、asOf。
+- loading、empty、error、mobile表示。
+
+ユーザーtimezone対応は設定の正が未実装のため初版ではUTCを明示し、後続変更へ分ける。集計query用indexは実行計画で必要性を確認してから別変更として追加する。
 
 ### Slice 5: Sandbox 金融機関接続
 
@@ -1435,3 +1467,7 @@ Repository 内の参照資料:
 | 2026-08-11 | 参考動画、公式実装、現行アプリ、AWS 構成を調査し、初版草案を作成 |
 | 2026-08-11 | Finance専用テーブルの `finance_` プレフィックス規則と共有テーブルの例外を追加 |
 | 2026-08-11 | Gitブランチ戦略に合わせ、AWS比較実験branchとTerraform stateの分離方針を更新 |
+| 2026-08-11 | Slice 2の口座詳細previewと金融機関groupingの実装境界を確定 |
+| 2026-08-11 | Slice 3を取引履歴基本版3Aとfilter・sort版3Bへ分割 |
+| 2026-08-11 | Slice 3Bのquery・UTC日付・cursor契約と、synthetic seed・MVP smokeの完了作業を確定 |
+| 2026-09-24 | Slice 4を支出集計APIとUIへ分割し、初版のUTC期間・通貨・asOf境界を確定 |

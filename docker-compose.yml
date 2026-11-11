@@ -52,7 +52,9 @@ services:
         condition: service_healthy
 
   db:
-    image: postgres:18-alpine
+    build:
+      context: ./docker/postgres
+    image: devlab-board-postgres18:latest
     container_name: devlab-board-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
